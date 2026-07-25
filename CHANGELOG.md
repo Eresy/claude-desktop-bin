@@ -2,6 +2,14 @@
 
 All notable changes to claude-desktop-bin AUR package will be documented in this file.
 
+## 2026-07-25
+
+### Fix: KDE sessions without KWallet had to sign in again after every reboot
+
+The launcher's Secret Service detection skipped KDE outright, assuming Chromium's `KDE -> kwallet` mapping always yields a working backend. It does not when KWallet is switched off (`kwalletrc` `Enabled=false`) or not installed: `safeStorage.isEncryptionAvailable()` returns false, the OAuth token never persists, and Plasma users who run gnome-keyring as their Secret Service were sent through the login flow on every boot. Checking the bus name is not sufficient either - `org.kde.kwalletd6` stays D-Bus activatable in that state and activation simply fails.
+
+KDE is now only treated as keyring-native when `kwalletd` answers a real `org.kde.KWallet.wallets` call (bounded by a 5s D-Bus timeout, so a pending wallet-creation wizard cannot stall startup); otherwise it falls through to the existing `gnome-libsecret` fallback from [#191](https://github.com/patrickjaja/claude-desktop-bin/issues/191). Working KWallet setups, GNOME, and `CLAUDE_PASSWORD_STORE=auto` are unaffected.
+
 ## 2026-07-20
 
 ### Fix: Hardware Buddy (Nibblet BLE) in-app scan found no device on Linux

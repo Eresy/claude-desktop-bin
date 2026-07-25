@@ -1584,7 +1584,15 @@ esac
 # "install a system keyring" they may already be running. When a Secret
 # Service is actually available on the session bus (owned or D-Bus
 # activatable), pass --password-store=gnome-libsecret so Electron uses it.
-# See issue #191. One-time side effect on machines previously on basic_text:
+# See issue #191.
+#
+# The same breakage hits KDE, which Chromium maps to kwallet unconditionally:
+# when KWallet is switched off (kwalletrc Enabled=false) or not installed, that
+# backend yields no encryption either, and users running gnome-keyring as their
+# Secret Service under Plasma have to sign in again after every reboot. So KDE
+# only counts as keyring-native when kwalletd actually answers on the bus.
+#
+# One-time side effect on machines previously on basic_text:
 # data encrypted with the old hardcoded key cannot be read after the switch,
 # so the first launch may require signing in again.
 #
@@ -1619,6 +1627,34 @@ _secret_service_available() {
     return 1
 }
 
+_kwallet_available() {
+    # Whether kwalletd can actually serve os_crypt. A bus-name check is NOT
+    # enough here: org.kde.kwalletd6 stays D-Bus activatable even when KWallet
+    # is switched off, and activation then fails ("unit failed"). So probe with
+    # a real method call, bounded by a short D-Bus timeout - the app's own
+    # kwalletd pre-flight warns that this call can otherwise block behind the
+    # wallet-creation wizard when kwalletd runs but has no wallet yet.
+    local _v _svc _obj
+    for _v in 6 5; do
+        _svc="org.kde.kwalletd${_v}"
+        _obj="/modules/kwalletd${_v}"
+        if command -v busctl &>/dev/null; then
+            busctl --user --no-pager --timeout=5 call \
+                "$_svc" "$_obj" org.kde.KWallet wallets &>/dev/null && return 0
+        elif command -v dbus-send &>/dev/null; then
+            dbus-send --session --print-reply --reply-timeout=5000 \
+                --dest="$_svc" "$_obj" org.kde.KWallet.wallets &>/dev/null && return 0
+        elif command -v gdbus &>/dev/null; then
+            gdbus call --session --timeout 5 --dest "$_svc" \
+                --object-path "$_obj" --method org.kde.KWallet.wallets &>/dev/null && return 0
+        else
+            # No way to probe - keep Chromium's KDE default untouched.
+            return 0
+        fi
+    done
+    return 1
+}
+
 _pw_store_explicit=''
 for _arg in "$@"; do
     if [[ "$_arg" == --password-store=* ]]; then
@@ -1630,17 +1666,29 @@ if [[ -z "$_pw_store_explicit" ]]; then
     case "${CLAUDE_PASSWORD_STORE:-}" in
         '')
             # Skip desktops Chromium already maps to a keyring backend
-            # (GNOME-family -> libsecret, KDE -> kwallet).
+            # (GNOME-family -> libsecret, KDE -> kwallet). KDE is verified
+            # below, since that mapping is a dead end without kwalletd.
             _de_keyring_native=''
+            _de_is_kde=''
             IFS=':' read -ra _de_parts <<< "${XDG_CURRENT_DESKTOP:-}"
             for _de in "${_de_parts[@]}"; do
                 case "${_de,,}" in
-                    gnome|kde|unity|deepin|cinnamon|x-cinnamon|pantheon|ukui)
+                    kde)
+                        _de_keyring_native=1
+                        _de_is_kde=1
+                        break
+                        ;;
+                    gnome|unity|deepin|cinnamon|x-cinnamon|pantheon|ukui)
                         _de_keyring_native=1
                         break
                         ;;
                 esac
             done
+            # Chromium's kwallet mapping is only real if kwalletd answers.
+            if [[ -n "$_de_is_kde" ]] && ! _kwallet_available; then
+                log "kwalletd does not answer on the session bus - KDE's kwallet backend would yield no encryption, falling back to Secret Service detection"
+                _de_keyring_native=''
+            fi
             if [[ -z "$_de_keyring_native" ]] && _secret_service_available; then
                 log "Secret Service detected on session bus; XDG_CURRENT_DESKTOP='${XDG_CURRENT_DESKTOP:-}' gets no keyring backend from Chromium - adding --password-store=gnome-libsecret"
                 ELECTRON_ARGS+=('--password-store=gnome-libsecret')
