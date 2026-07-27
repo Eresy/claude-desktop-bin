@@ -102,6 +102,9 @@ stdenvNoCC.mkDerivation {
   # pipewire, libpulseaudio and speechd have no LD_LIBRARY_PATH backstop at all.
   # Fail the build instead of shipping that. patchelf is on PATH from the Linux
   # stdenv even here (dontPatchELF disables its fixup hook, not the tool).
+  # It reports success explicitly: a silent pass is indistinguishable from the
+  # check never running (a renamed attribute would be ignored, not an error), and
+  # this is exactly the assertion whose absence caused #206 to go unnoticed.
   postFixup = ''
     if ! patchelf --print-rpath $out/lib/claude-desktop/claude | grep -q libsecret; then
       echo "ERROR: libsecret is not in the claude binary's RPATH." >&2
@@ -110,6 +113,7 @@ stdenvNoCC.mkDerivation {
       echo "still covers libsecret, but the other four dlopened libs do not have that." >&2
       exit 1
     fi
+    echo "libsecret RPATH tripwire: OK (dlopen-only libs survived fixup)"
   '';
 
   # "name" becomes the .desktop filename. It is "com.anthropic.Claude" so the
