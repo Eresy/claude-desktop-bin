@@ -2,6 +2,7 @@
 , stdenvNoCC
 , fetchurl
 , electron
+, libsecret          # dlopened by Chromium's os_crypt for keyring credential storage
 , makeWrapper
 , makeDesktopItem
 , copyDesktopItems
@@ -72,6 +73,20 @@ stdenvNoCC.mkDerivation {
   sourceRoot = ".";
 
   nativeBuildInputs = [ makeWrapper copyDesktopItems ];
+
+  # Keep the RPATH nixpkgs' electron deliberately baked into its binary. Chromium
+  # dlopens several libraries instead of linking them, so they never appear in
+  # DT_NEEDED: libsecret (os_crypt keyring), libnotify, pipewire, libpulseaudio,
+  # speechd. nixpkgs covers them with `patchelf --add-rpath` (source-built
+  # electron) / `--set-rpath` (electron-bin), and that RPATH rides along when we
+  # copy the dist below. But stdenv's patchelf fixup hook then runs
+  # `patchelf --shrink-rpath`, which drops exactly the entries no DT_NEEDED
+  # library lives in - i.e. all five - and with them their store references, so
+  # the libs fall out of our closure entirely. For libsecret that left
+  # safeStorage.isEncryptionAvailable() false forever: sign-in never persisted
+  # across restarts (issue #206). Nothing else in this output needs shrinking -
+  # the CU bridges are static musl or foreign glibc binaries.
+  dontPatchELF = true;
 
   # "name" becomes the .desktop filename. It is "com.anthropic.Claude" so the
   # installed file is com.anthropic.Claude.desktop, matching the app's *live*
@@ -144,10 +159,19 @@ stdenvNoCC.mkDerivation {
 
     # Install launcher script (handles --toggle, --install-gnome-hotkey, --diagnose
     # and all Wayland/X11 detection, GPU fallback, etc.)
+    #
+    # libsecret is also declared explicitly on LD_LIBRARY_PATH: dontPatchELF above
+    # already keeps it reachable via the binary's RPATH, but this makes the
+    # requirement visible the way every other packaging format states it
+    # (PKGBUILD 'libsecret', deb libsecret-1-0, rpm Requires: libsecret) and keeps
+    # credential storage working even if a future nixpkgs electron stops shipping
+    # it in the RPATH. Suffixed, so it can never shadow a library for the app's
+    # children (MCP servers, claude-code, qemu).
     mkdir -p $out/bin
     cp launcher/claude-desktop $out/lib/claude-desktop/launcher.sh
     chmod +x $out/lib/claude-desktop/launcher.sh
     makeWrapper $out/lib/claude-desktop/launcher.sh $out/bin/claude-desktop \
+      --suffix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ libsecret ]} \
       --set CLAUDE_ELECTRON "$out/lib/claude-desktop/claude" \
       --set ELECTRON_OZONE_PLATFORM_HINT "auto" \
       --set ELECTRON_FORCE_IS_PACKAGED "true" \
