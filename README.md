@@ -19,7 +19,7 @@ Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claud
 - [**Custom Themes**](#custom-themes) - 7 built-in dual light/dark themes with custom loading spinners, or roll your own.
 - [**Multiple Profiles**](#multiple-profiles) - run several instances side by side, each logged in to a different account with fully isolated state.
 - [**Quick Entry**](#quick-entry) - global hotkey popup (Ctrl+Alt+Space), multi-monitor and Wayland-aware.
-- [**Hardware Buddy**](#patches) - enables the Nibblet BLE pet device (Bluetooth via BlueZ), which upstream leaves off on Linux.
+- [**Hardware Buddy**](#patches) - enables the Nibblet BLE pet device on Linux: forces the feature flag so the BLE transport arms, and turns on Chromium Web Bluetooth (via BlueZ) so the in-app scan can find the device - both are off by default upstream on Linux.
 
 Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise inference - is the **official upstream build**, preserved through the repackage. Where its shared cross-platform bundle still gates a feature to macOS/Windows or misbehaves on a Linux desktop, we ship a **Linux fix** (see [Patches](#patches) - each entry states exactly why it exists).
 
