@@ -159,10 +159,11 @@ nix profile install github:patrickjaja/claude-desktop-bin
 
 > **Note:** Update by running `nix flake update` to pull the latest version. `nix run` always fetches the latest.
 
-> **Optional deps on Nix: wired automatically.** The flake pulls the Cowork tools (`qemu`, `virtiofsd`, OVMF firmware) from nixpkgs and bakes them into the app's closure - nothing to install. Use `.override { … }` to swap or drop a tool (e.g. `qemu = null;` shrinks the closure if you don't need Cowork). Only one host-level step remains, in NixOS form:
+> **Optional deps on Nix: wired automatically.** The flake pulls the Cowork tools (`qemu`, `virtiofsd`, OVMF firmware) from nixpkgs and bakes them into the app's closure - nothing to install. Use `.override { … }` to swap or drop a tool (e.g. `qemu = null;` shrinks the closure if you don't need Cowork). Two host-level steps remain, in NixOS form:
 >
 > ```nix
 > users.users.<you>.extraGroups = [ "kvm" ];  # Cowork: /dev/kvm access (once, needs re-login)
+> services.gnome.gnome-keyring.enable = true; # keeps sign-in across restarts (GNOME enables this itself)
 > ```
 >
 > **NixOS Computer Use caveat:** the static bridges (X11 / XWayland / Sway / Hyprland / Niri) run as-is; the glibc-dynamic GNOME/KDE bridges do not - see [Computer Use dependencies](docs/computer-use-dependencies.md#nixos) for the `.override` workaround. If your flake pins a release older than v1.18286.0, virtiofsd and OVMF need manual exposure - see the notes in [`packaging/nix/package.nix`](packaging/nix/package.nix).

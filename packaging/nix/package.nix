@@ -3,6 +3,7 @@
 , fetchurl
 , electron
 , libsecret          # dlopened by Chromium's os_crypt for keyring credential storage
+, patchelf           # RPATH tripwire below
 , makeWrapper
 , makeDesktopItem
 , copyDesktopItems
@@ -72,7 +73,10 @@ stdenvNoCC.mkDerivation {
 
   sourceRoot = ".";
 
-  nativeBuildInputs = [ makeWrapper copyDesktopItems ];
+  # patchelf comes from the Linux stdenv anyway; declared explicitly because the
+  # tripwire below pipes it into grep, so a missing binary would surface as
+  # grep's exit status - i.e. the tripwire firing with the wrong explanation.
+  nativeBuildInputs = [ makeWrapper copyDesktopItems patchelf ];
 
   # Keep the RPATH nixpkgs' electron deliberately baked into its binary. Chromium
   # dlopens several libraries instead of linking them, so they never appear in
@@ -81,12 +85,32 @@ stdenvNoCC.mkDerivation {
   # electron) / `--set-rpath` (electron-bin), and that RPATH rides along when we
   # copy the dist below. But stdenv's patchelf fixup hook then runs
   # `patchelf --shrink-rpath`, which drops exactly the entries no DT_NEEDED
-  # library lives in - i.e. all five - and with them their store references, so
-  # the libs fall out of our closure entirely. For libsecret that left
-  # safeStorage.isEncryptionAvailable() false forever: sign-in never persisted
-  # across restarts (issue #206). Nothing else in this output needs shrinking -
-  # the CU bridges are static musl or foreign glibc binaries.
+  # library lives in - i.e. all five - so they leave the binary's RUNPATH and
+  # dlopen can no longer find them. With the source-built electron that also
+  # drops their store references and the libs leave the closure outright (the
+  # reporter measured zero libsecret references); with electron-bin the closure
+  # keeps them via the retained ${electron}/libexec/electron entry, but the
+  # RUNPATH is just as gone. Either way safeStorage.isEncryptionAvailable() was
+  # false forever and sign-in never persisted across restarts (issue #206).
+  # Nothing else in this output needs shrinking - the CU bridges are static musl
+  # (no .dynamic at all) or foreign glibc binaries carrying no store RPATH.
   dontPatchELF = true;
+
+  # Tripwire. dontPatchELF only helps while nixpkgs' electron actually ships the
+  # dlopen-only libs in its RPATH. If that ever stops, libsecret becomes
+  # unreachable again and sign-in silently stops persisting - and libnotify,
+  # pipewire, libpulseaudio and speechd have no LD_LIBRARY_PATH backstop at all.
+  # Fail the build instead of shipping that. patchelf is on PATH from the Linux
+  # stdenv even here (dontPatchELF disables its fixup hook, not the tool).
+  postFixup = ''
+    if ! patchelf --print-rpath $out/lib/claude-desktop/claude | grep -q libsecret; then
+      echo "ERROR: libsecret is not in the claude binary's RPATH." >&2
+      echo "nixpkgs' electron no longer ships Chromium's dlopen-only libraries there;" >&2
+      echo "re-audit packaging/nix/package.nix against issue #206. LD_LIBRARY_PATH below" >&2
+      echo "still covers libsecret, but the other four dlopened libs do not have that." >&2
+      exit 1
+    fi
+  '';
 
   # "name" becomes the .desktop filename. It is "com.anthropic.Claude" so the
   # installed file is com.anthropic.Claude.desktop, matching the app's *live*
