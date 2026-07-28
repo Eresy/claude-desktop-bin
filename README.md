@@ -60,6 +60,7 @@ curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | 
 # Install (also brings the system up to date, as Arch requires)
 sudo pacman -Syu claude-desktop-bin
 ```
+
 `-Syu` is deliberate: Arch only supports fully-upgraded systems, so installing from a freshly synced repo and upgrading happen in one step. Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
 
 **Optional deps.**
@@ -77,9 +78,9 @@ sudo pacman -S --needed qemu-system-aarch64 edk2-aarch64 virtiofsd  # aarch64
 Also optional: `nodejs` (system MCP servers), `sqlite` (project detection), `claude-code`.
 
 <details>
-<summary>Manual <code>pacman.conf</code> setup (without the install script)</summary>
+<summary>Advanced: manual <code>pacman.conf</code> setup (without the install script)</summary>
 
-Append to `/etc/pacman.conf`:
+The install script only automates these steps. Append to `/etc/pacman.conf` (on aarch64 the section name is `[claude-desktop-bin-aarch64]`; the `Server` line and the package name stay the same):
 
 ```ini
 [claude-desktop-bin]
@@ -87,14 +88,20 @@ SigLevel = Required DatabaseRequired
 Server = https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
 ```
 
-On aarch64 the section name is `[claude-desktop-bin-aarch64]` instead (the `Server` line and the package name stay the same). Then import and locally sign the key - both steps are required, because under `SigLevel = Required` pacman rejects the repo until the key carries your local signature:
+Then import the signing key, **verify its fingerprint**, and locally sign it:
 
 ```bash
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc -o /tmp/claude-desktop-bin.asc
+gpg --show-keys --with-fingerprint /tmp/claude-desktop-bin.asc
+# Must print: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867 - stop here if it does not.
+
+sudo pacman-key --init            # no-op on a normal Arch install; needed on fresh keyrings, containers and chroots
 sudo pacman-key --add /tmp/claude-desktop-bin.asc
-sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/claude-desktop-bin.asc | awk -F: '/^fpr:/{print $10; exit}')"
+sudo pacman-key --lsign-key 825A7D15D78BABE45646D5DF382409F597908867
 sudo pacman -Syu claude-desktop-bin
 ```
+
+Checking the fingerprint is what makes this trustworthy: it is published in [the README in git](#verifying-the-repository-signing-key), a different channel from the web server serving the key, so a swapped key does not match. Both key steps are required - under `SigLevel = Required` pacman rejects the repo until the key carries your local signature - and `--lsign-key` fails with a cryptic "There is no secret key available to sign with" if the keyring was never initialised, hence the `--init`.
 </details>
 
 <details>
@@ -238,7 +245,7 @@ ARM64 `.deb`, `.rpm`, AppImage, and Nix packages are available for **Raspberry P
 
 ### Verifying the repository signing key
 
-The APT and DNF repositories are GPG-signed. The install scripts import the key from GitHub Pages over HTTPS. To verify the key out-of-band, compare its fingerprint against the value published here (this README lives in the git repo, a separate channel from the Pages-hosted key):
+The APT, DNF and pacman repositories are GPG-signed with the same key. The install scripts import it from GitHub Pages over HTTPS. To verify the key out-of-band, compare its fingerprint against the value published here (this README lives in the git repo, a separate channel from the Pages-hosted key):
 
 ```
 Key:         Claude Desktop Linux <claude-desktop-linux@users.noreply.github.com>
