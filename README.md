@@ -5,7 +5,7 @@
 [![Website](https://img.shields.io/badge/Website-Landing_Page-a78bfa?logo=github)](https://patrickjaja.github.io/claude-desktop-bin/)
 [![Reddit](https://img.shields.io/badge/Reddit-Discussion-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/ClaudeAI/comments/1r871b0/claude_desktop_on_linux_chat_cowork_code/)
 
-[![AUR version](https://img.shields.io/aur/version/claude-desktop-bin)](https://aur.archlinux.org/packages/claude-desktop-bin)
+[![Pacman repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/pacman-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#arch-linux--manjaro-pacman-repository)
 [![APT repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/apt-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#debian--ubuntu-apt-repository)
 [![RPM repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/rpm-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#fedora--rhel-dnf-repository)
 [![AppImage](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/appimage.json)](https://github.com/patrickjaja/claude-desktop-bin#appimage-any-distro)
@@ -13,7 +13,7 @@
 
 **Anthropic's official Claude Desktop Linux build, repackaged for the distros Anthropic doesn't ship - plus Linux-only extras.**
 
-Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project takes that official build, repackages it for **Arch/AUR, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
+Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
 
 - [**Computer Use**](#computer-use) - desktop automation (screenshot, click, type, scroll, teach mode).
 - [**Custom Themes**](#custom-themes) - 7 built-in dual light/dark themes with custom loading spinners, or roll your own.
@@ -54,11 +54,15 @@ Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise infere
 
 Pick your distro below. [Computer Use](#computer-use) works out of the box everywhere - all backends are bundled, nothing to install. The only optional dependency to care about is **Cowork** (agent workspace VM), listed per distro.
 
-### Arch Linux / Manjaro (AUR)
+### Arch Linux / Manjaro (Pacman Repository)
 ```bash
-yay -S claude-desktop-bin
+# Add repository + import signing key (one-time setup)
+curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+
+# Install (also brings the system up to date, as Arch requires)
+sudo pacman -Syu claude-desktop-bin
 ```
-Updates arrive through your AUR helper (e.g. `yay -Syu`).
+`-Syu` is deliberate: Arch only supports fully-upgraded systems, so installing from a freshly synced repo and upgrading happen in one step. Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
 
 **Optional deps.**
 
@@ -73,6 +77,40 @@ sudo pacman -S --needed qemu-system-aarch64 edk2-aarch64 virtiofsd  # aarch64
 > **Arch Linux ARM / EndeavourOS ARM / Manjaro ARM (native aarch64 host, e.g. Raspberry Pi 5):** `edk2-aarch64` is `arch=any` on archlinux.org but Arch Linux ARM's repos don't carry it, so `pacman -S edk2-aarch64` fails with `target not found` even after `-Syu` ([ALARM forum #16140](https://archlinuxarm.org/forum/viewtopic.php?t=16140)). Since the package is architecture-independent, grab it from the x86_64 Arch mirrors and install locally: `curl -L https://archlinux.org/packages/extra/any/edk2-aarch64/download -o edk2-aarch64.pkg.tar.zst && sudo pacman -U ./edk2-aarch64.pkg.tar.zst`.
 
 Also optional: `nodejs` (system MCP servers), `sqlite` (project detection), `claude-code`.
+
+<details>
+<summary>Manual <code>pacman.conf</code> setup (without the install script)</summary>
+
+Append to `/etc/pacman.conf`:
+
+```ini
+[claude-desktop-bin]
+SigLevel = Required DatabaseRequired
+Server = https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
+```
+
+On aarch64 the section name is `[claude-desktop-bin-aarch64]` instead (the `Server` line and the package name stay the same). Then import and locally sign the key - both steps are required, because under `SigLevel = Required` pacman rejects the repo until the key carries your local signature:
+
+```bash
+curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc -o /tmp/claude-desktop-bin.asc
+sudo pacman-key --add /tmp/claude-desktop-bin.asc
+sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/claude-desktop-bin.asc | awk -F: '/^fpr:/{print $10; exit}')"
+sudo pacman -Syu claude-desktop-bin
+```
+</details>
+
+<details>
+<summary>Build from source with <code>makepkg</code> (no third-party repository)</summary>
+
+The `PKGBUILD` is generated and CI-tested on every release, and published as a release asset alongside `.SRCINFO` and `claude-desktop-bin.install`:
+
+```bash
+mkdir claude-desktop-bin && cd claude-desktop-bin
+base=https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
+curl -fsSL -O "$base/PKGBUILD" -O "$base/claude-desktop-bin.install"
+makepkg -si
+```
+</details>
 
 ### Debian / Ubuntu (APT Repository)
 
@@ -336,7 +374,7 @@ This binds the key directly via `gsettings`, bypassing the portal. See [wayland.
 
 Cowork (and Dispatch) run on the **official native Cowork VM backend** bundled inside the package (cowork-linux-helper + virtiofsd + smol-bin + QEMU/OVMF) - the same backend Anthropic ships in the official Linux build. There's no separate daemon to install; sessions run in a lightweight VM with `$HOME` shared in, which requires **`/dev/kvm`** on the host.
 
-**QEMU + OVMF firmware + virtiofsd are recommended dependencies** of the `.deb` / `.rpm` / AUR packages (matching Anthropic's official `.deb`), so a normal `apt`/`dnf` install pulls them by default. One step remains (needed once):
+**QEMU + OVMF firmware + virtiofsd are recommended dependencies** of the `.deb` / `.rpm` / pacman packages (matching Anthropic's official `.deb`), so a normal `apt`/`dnf` install pulls them by default. One step remains (needed once):
 
 ```bash
 sudo usermod -aG kvm "$USER"        # /dev/kvm access - then log out and back in
@@ -534,7 +572,7 @@ Computer Use patches emit `[claude-cu] diagnostics:` lines showing the detected 
 
 ## Automation
 
-CI polls the official apt Packages index every 2 hours, downloads the latest official `.deb` (verifying GPG + SHA256), extracts and patches its `app.asar`, and **validates every patch in Docker** (`makepkg` in `archlinux:base-devel`) before publishing. Each patch exits 1 if its pattern doesn't match, so a broken package never reaches users - the pipeline stops with a clear `[FAIL]` and the AUR/repo packages stay on the last-good version until patches are updated.
+CI polls the official apt Packages index every 2 hours, downloads the latest official `.deb` (verifying GPG + SHA256), extracts and patches its `app.asar`, and **validates every patch in Docker** (`makepkg` in `archlinux:base-devel`) before publishing. Each patch exits 1 if its pattern doesn't match, so a broken package never reaches users - the pipeline stops with a clear `[FAIL]` and the published repositories stay on the last-good version until patches are updated.
 
 ## Repository Structure
 
@@ -544,7 +582,7 @@ CI polls the official apt Packages index every 2 hours, downloads the latest off
 - `js/` - shared JS snippets embedded by the patches
 - `packaging/` - Debian, RPM, AppImage, and Nix build scripts
 - `baseline/` - version-sensitive reference docs re-validated each release
-- `PKGBUILD.template` - AUR package template
+- `PKGBUILD.template` - pacman package template
 
 ## See Also
 

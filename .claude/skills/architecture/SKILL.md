@@ -6,7 +6,7 @@ when_to_use: When the user asks what the project does, how the pieces fit, what 
 
 # Architecture - claude-desktop-bin
 
-Repackages Anthropic's **official Claude Desktop Linux `.deb`** for the distros Anthropic does not ship (Arch/AUR, Fedora/RHEL, NixOS, AppImage) and for our own Debian/Ubuntu `.deb`, while layering a small set of **Linux-only value-adds** that the official build does not provide. See `/linux` for compat specifics.
+Repackages Anthropic's **official Claude Desktop Linux `.deb`** for the distros Anthropic does not ship (Arch via our own pacman repo, Fedora/RHEL, NixOS, AppImage) and for our own Debian/Ubuntu `.deb`, while layering a small set of **Linux-only value-adds** that the official build does not provide. See `/linux` for compat specifics.
 
 ## What we start from: the official Linux .deb
 Anthropic publishes an official Claude Desktop build for Linux as a `.deb` in an apt repo (`https://downloads.claude.ai/claude-desktop/apt`). It bundles its own Electron (42.5.1) and ships a **native Cowork VM backend** (cowork-linux-helper + virtiofsd + smol-bin + QEMU/OVMF; requires `/dev/kvm`). The official build natively supports Chat, Code, Cowork, Computer Use is in beta upstream, and reads managed config from `/etc/claude-desktop/managed-settings.json`. We do **not** patch the Windows MSIX any more - that pipeline is gone.
@@ -14,7 +14,7 @@ Anthropic publishes an official Claude Desktop build for Linux as a `.deb` in an
 ## What this repo does: ingest -> patch -> repackage
 **Ingest:** download the official `.deb` (apt repo, or `--deb PATH`/`--version X`) -> verify GPG + SHA256 -> `dpkg-deb -x` -> locate `usr/lib/claude-desktop/resources/app.asar` -> `asar extract`.
 **Patch:** run `scripts/apply_patches.py` (the orchestrator) over the extracted bundle. **48** surgical JS patches (`patches/*.nim`, compiled native binaries, regex on minified JS) apply Linux-only fixes and our value-adds. The official build re-minifies between releases, so patterns use `[\w$]+` wildcards anchored on stable strings (feature names, log messages, `process.platform==="darwin"`), count `EXPECTED_PATCHES`, and `quit(1)` on any miss. `.upstream-version` records the last validated version.
-**Repackage:** `asar pack` (preserving `app.asar.unpacked`, which carries the official build's pre-built native modules - we no longer rebuild node-pty) into a tarball, then build AUR/our-own-deb/rpm/AppImage/Nix from it.
+**Repackage:** `asar pack` (preserving `app.asar.unpacked`, which carries the official build's pre-built native modules - we no longer rebuild node-pty) into a tarball, then build the pacman package/our-own-deb/rpm/AppImage/Nix from it.
 
 Several patches that used to *enable* Cowork on Linux (the "cowork-wiring" cluster) were **removed** once the official build started shipping Cowork natively; what remains of that area is a small number of **regression guards** that assert the upstreamed native-Linux behavior is still present and fail loud if Anthropic ever drops it.
 
@@ -48,5 +48,5 @@ Anthropic official Claude Desktop Linux .deb  (Electron 42.5.1 + native Cowork V
 claude-desktop-bin  (48 JS patches: Linux fixes + Computer Use + themes + profiles + Quick Entry)
         │  asar pack → tarball
         ▼
-AUR / our .deb / .rpm / .AppImage / Nix
+our pacman repo / our .deb / .rpm / .AppImage / Nix
 ```

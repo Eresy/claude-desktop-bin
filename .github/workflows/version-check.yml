@@ -130,8 +130,9 @@ jobs:
       # AUTO-RELEASE path: on a newly detected version, kick off a full
       # release run. Patches are strict (every sub-patch must apply or the
       # build fails loud), so a green run means the new version is handled:
-      # it publishes the release, pushes AUR, and commits README versions +
-      # Nix hash + .upstream-version back to master. On failure the run
+      # it publishes the release (packages + signed apt/rpm/pacman repos) and
+      # commits README versions + Nix hash + .upstream-version back to
+      # master. On failure the run
       # comments on the tracking issue created above - that is the signal
       # for a human to run the /update skill (fix or remove patches).
       # We dispatch only once per version by gating on the same "no open

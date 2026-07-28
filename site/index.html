@@ -497,7 +497,8 @@
     </div>
     <div class="terminal-body" id="hero-terminal">
       <div><span class="terminal-comment"># install in one command</span></div>
-      <div><span class="terminal-prompt">$</span> <span class="terminal-cmd" id="hero-cmd">yay -S claude-desktop-bin</span><span class="cursor"></span></div>
+      <div><span class="terminal-prompt">$</span> <span class="terminal-cmd" id="hero-cmd">curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash</span></div>
+      <div><span class="terminal-prompt">$</span> <span class="terminal-cmd">sudo pacman -Syu claude-desktop-bin</span><span class="cursor"></span></div>
     </div>
   </div>
 
@@ -526,10 +527,14 @@
 
   <div class="tab-panel active" id="tab-arch">
     <div class="install-block">
-      <button class="copy-btn" data-copy="yay -S claude-desktop-bin">Copy</button>
-      <pre>yay -S claude-desktop-bin</pre>
+      <button class="copy-btn" data-copy="curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+sudo pacman -Syu claude-desktop-bin">Copy</button>
+      <pre><span class="comment"># Add repo + GPG key</span>
+curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+<span class="comment"># Install</span>
+sudo pacman -Syu claude-desktop-bin</pre>
     </div>
-    <div class="install-note">Available on the <a href="https://aur.archlinux.org/packages/claude-desktop-bin">AUR</a>. Works with yay, paru, or any AUR helper.</div>
+    <div class="install-note">Updates arrive through <code>pacman -Syu</code> (or <code>yay -Syu</code>). Signed packages, x86_64 and aarch64. <a href="https://github.com/patrickjaja/claude-desktop-bin#arch-linux--manjaro-pacman-repository">Manual setup and <code>makepkg</code> build →</a></div>
   </div>
 
   <div class="tab-panel" id="tab-debian">
@@ -698,7 +703,7 @@ chmod +x Claude_Desktop-x86_64.AppImage
       <tbody>
         <tr>
           <td>Arch Linux / Manjaro</td>
-          <td>AUR</td>
+          <td>.pkg.tar.zst (pacman)</td>
           <td><span class="check">&#10003;</span></td>
           <td><span class="check">&#10003;</span></td>
         </tr>
@@ -878,13 +883,12 @@ chmod +x Claude_Desktop-x86_64.AppImage
       &middot;
       <a href="https://github.com/patrickjaja/claude-desktop-bin/issues">Issues</a>
       &middot;
-      <a href="https://aur.archlinux.org/packages/claude-desktop-bin">AUR</a>
-      &middot;
       <a href="https://www.reddit.com/r/ClaudeAI/comments/1r871b0/claude_desktop_on_linux_chat_cowork_code/">Reddit</a>
     </p>
   </div>
   <div class="footer-badges">
     <img src="https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/version-check.json" alt="Version" loading="lazy">
+    <img src="https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/pacman-repo.json" alt="Pacman" loading="lazy">
     <img src="https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/apt-repo.json" alt="APT" loading="lazy">
     <img src="https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/rpm-repo.json" alt="RPM" loading="lazy">
     <img src="https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/appimage.json" alt="AppImage" loading="lazy">
@@ -895,7 +899,7 @@ chmod +x Claude_Desktop-x86_64.AppImage
 <script>
   // Distro-specific hero commands and install tab mapping
   var distroCommands = {
-    arch:    'yay -S claude-desktop-bin',
+    arch:    'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash\nsudo pacman -Syu claude-desktop-bin',
     debian:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash\nsudo apt install claude-desktop-bin',
     fedora:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash\nsudo dnf install claude-desktop-bin',
     nix:     'nix run github:patrickjaja/claude-desktop-bin',

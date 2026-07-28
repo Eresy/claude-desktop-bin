@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project repackages Anthropic's **official Claude Desktop Linux `.deb`** for the distros Anthropic does not ship (Arch/AUR primary, plus Fedora/RHEL via RPM, NixOS, AppImage, and our own Debian/Ubuntu `.deb`). It applies JavaScript patches to the official build's `app.asar` to add Linux-only value-adds (Computer Use, custom themes, multi-profile, Quick Entry) and Linux fixes.
+This project repackages Anthropic's **official Claude Desktop Linux `.deb`** for the distros Anthropic does not ship (Arch via our own pacman repo primary, plus Fedora/RHEL via RPM, NixOS, AppImage, and our own Debian/Ubuntu `.deb`). It applies JavaScript patches to the official build's `app.asar` to add Linux-only value-adds (Computer Use, custom themes, multi-profile, Quick Entry) and Linux fixes.
 
 The official `.deb` (apt repo `https://downloads.claude.ai/claude-desktop/apt`) bundles its own **Electron 42.5.1** and a **native Cowork VM backend**. We download it, verify GPG + SHA256, `dpkg-deb -x` it, patch its `app.asar`, and repackage. We no longer ingest the Windows MSIX, and we no longer pin Electron or rebuild node-pty (both are bundled in the official `.deb`).
 
@@ -16,7 +16,7 @@ The official `.deb` (apt repo `https://downloads.claude.ai/claude-desktop/apt`) 
 
 | Distro | Packaging | Min glibc | Arch |
 |--------|-----------|-----------|------|
-| Arch Linux | AUR (`claude-desktop-bin`) | 2.41 (rolling) | x86_64, aarch64 |
+| Arch Linux | own pacman repo (`claude-desktop-bin`) | 2.41 (rolling) | x86_64, aarch64 |
 | Ubuntu 22.04+ | `.deb` | 2.35 | amd64, arm64 |
 | Debian 12+ | `.deb` | 2.36 | amd64, arm64 |
 | Fedora 40+ | `.rpm` | 2.39 | x86_64, aarch64 |
@@ -78,7 +78,7 @@ These files embed assumptions about upstream internals and **must be challenged 
 
 ## Update Workflow
 
-**Upstream bumps are handled automatically by default.** Since we repackage the official Linux `.deb` (Anthropic maintains 1p Linux support), most releases need zero manual work: `version-check.yml` (2-hourly) detects a new version, opens a tracking issue, and dispatches `build-and-release.yml` in release mode. The patch strictness rules make that run the arbiter — every sub-patch must apply or the build fails loud. Green run → packages published, AUR pushed, README versions + Nix hash + `.upstream-version` committed, tracking issue auto-closed. Red run → a comment lands on the tracking issue; **that comment is the signal for manual work**.
+**Upstream bumps are handled automatically by default.** Since we repackage the official Linux `.deb` (Anthropic maintains 1p Linux support), most releases need zero manual work: `version-check.yml` (2-hourly) detects a new version, opens a tracking issue, and dispatches `build-and-release.yml` in release mode. The patch strictness rules make that run the arbiter — every sub-patch must apply or the build fails loud. Green run → packages published (including the signed pacman repo db as release assets), README versions + Nix hash + `.upstream-version` committed, tracking issue auto-closed. Red run → a comment lands on the tracking issue; **that comment is the signal for manual work**.
 
 Caveat: a green build proves the patches *applied*, not that runtime behavior is correct — a wildcard regex can in principle match a wrong site after a re-minify, and remote claude.ai code can change behavior without any desktop release (issue #173 was exactly that). The safety net is the strict counts + positive end-state assertions + smoke test; spot-check a real install after notable bumps.
 
@@ -451,7 +451,7 @@ rm -rf ~/.config/Claude/local-agent-mode-sessions/
 GitHub Actions workflow:
 1. Polls the official apt Packages index; downloads the latest official Claude Desktop `.deb` and verifies GPG + SHA256
 2. Extracts `app.asar`, applies patches, repackages, and runs validation in Docker
-3. If validation passes, publishes packages and pushes to AUR
+3. If validation passes, publishes the packages plus the signed APT, DNF and pacman repository metadata
 
 When CI fails, download the `.deb` locally and debug using the workflow above.
 

@@ -29,7 +29,7 @@ on:
 # Serialize release runs: all workflow_dispatch runs share ONE group with
 # cancel-in-progress off, so a second dispatch (e.g. version-check auto-release
 # firing while a manual /deploy is in flight) QUEUES instead of racing the
-# first run's release/AUR-push/master-commit section. PR validation keeps the
+# first run's release/master-commit section. PR validation keeps the
 # per-branch group with cancellation (new push supersedes the old validation).
 concurrency:
   group: ${{ github.event_name == 'workflow_dispatch' && format('{0}-release-train', github.workflow) || format('{0}-{1}', github.workflow, github.head_ref || github.run_id) }}
@@ -45,8 +45,9 @@ concurrency:
 #         │                  ├── package-deb      (matrix: amd64, arm64)
 #         │                  ├── package-rpm      (matrix: x86_64, aarch64)
 #         │                  ├── test-nix
-#         │                  └── generate-pkgbuild ──► test-pkgbuild (makepkg + namcap)
-#         │                          │
+#         │                  └── generate-pkgbuild ──► test-pkgbuild (matrix: x86_64, aarch64;
+#         │                          │                                makepkg + namcap, uploads
+#         │                          │                                the real .pkg.tar.zst)
 #         │                  release (needs all above — workflow_dispatch, NOT auto_pr)
 #         │                          │
 #         │                  deploy-rpm-repo (fedora:40, signs RPMs — release path)
@@ -317,7 +318,7 @@ jobs:
         run: |
           echo "=== Running shellcheck on shell scripts ==="
           FAILED=false
-          for f in scripts/*.sh packaging/apt/*.sh packaging/rpm/*.sh .github/scripts/*.sh; do
+          for f in scripts/*.sh packaging/apt/*.sh packaging/rpm/*.sh packaging/pacman/*.sh .github/scripts/*.sh; do
             [ -f "$f" ] || continue
             echo "Checking $f..."
             if ! shellcheck -S error "$f"; then
@@ -1573,7 +1574,7 @@ jobs:
           name: pkgbuild
           # The .install file is referenced by PKGBUILD's `install=` field and
           # MUST travel with it — makepkg reads it relative to the PKGBUILD dir,
-          # and the AUR repo needs it for users' makepkg too.
+          # users need it next to the published PKGBUILD for `makepkg -si` too.
           path: |
             PKGBUILD
             .SRCINFO
@@ -1582,55 +1583,92 @@ jobs:
           retention-days: 1
 
   # ================================================================
-  # Job 3f: Test PKGBUILD with makepkg + namcap — catches packaging bugs
+  # Job 3f: Build the REAL Arch packages with makepkg + namcap
+  #         (matrix: x86_64, aarch64) - PARALLEL
+  #
+  # This used to be a throwaway test (built the package, then dropped it).
+  # Since we ship our own signed pacman repository on the release assets
+  # instead of the AUR, the package this job builds IS the shipped
+  # artifact - so it is uploaded, and every existing gate (namcap,
+  # pacman -U, xvfb launch) still has to pass before it can be released.
+  #
+  # Why a matrix over the existing job rather than a separate second job:
+  # the PKGBUILD compiles NOTHING (it only extracts the prebuilt tarball
+  # and sets options=('!strip')), so an aarch64 package can be produced
+  # inside this same amd64 container by overriding CARCH/CHOST in
+  # /etc/makepkg.conf and pointing source_aarch64 at the locally
+  # downloaded arm64 tarball. Every step is identical except the two that
+  # genuinely cannot run cross-arch (pacman -U and the xvfb launch), so a
+  # matrix keeps ONE copy of the logic, runs both legs in parallel, and
+  # keeps the job id `test-pkgbuild` - which means every existing
+  # `needs:` list (release, notify-version-issue-failure) stays correct.
   # ================================================================
   test-pkgbuild:
-    needs: [check-version, build-tarball, generate-pkgbuild]
+    needs: [check-version, build-tarball, build-aarch64-tarball, generate-pkgbuild]
     if: needs.check-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download tarball
+      # x86_64 -> `tarball`; aarch64 -> `tarball-aarch64` (official arm64 .deb,
+      # arm64 Electron + kwin-portal-bridge already bundled).
+      - name: Download x86_64 tarball
+        if: matrix.arch == 'x86_64'
         uses: actions/download-artifact@v4
         with:
           name: tarball
+
+      - name: Download aarch64 tarball
+        if: matrix.arch == 'aarch64'
+        uses: actions/download-artifact@v4
+        with:
+          name: tarball-aarch64
 
       - name: Download PKGBUILD
         uses: actions/download-artifact@v4
         with:
           name: pkgbuild
 
-      - name: Test makepkg (cross-device build dir)
+      - name: Build package with makepkg (${{ matrix.arch }}, cross-device build dir)
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
+          TARGET_ARCH: ${{ matrix.arch }}
         run: |
-          # The PKGBUILD has a SINGLE tarball source (the tarball ships the
-          # official .deb's claude-desktop/ tree verbatim, Electron included -
-          # no separate Electron zip source to fetch/verify). Point that one
-          # source at the local tarball so makepkg builds offline (the release
-          # isn't published yet).
-          TARBALL="claude-desktop-${VERSION}-linux.tar.gz"
-
-          # Override tarball source with the local file.
-          sed -i "s|^source_x86_64=.*|source_x86_64=(\"${TARBALL}\")|" PKGBUILD
-          sed -i "s|^sha256sums_x86_64=.*|sha256sums_x86_64=('SKIP')|" PKGBUILD
-
-          # Neutralize aarch64 sources — test runs on x86_64 only; prevents namcap
-          # from trying to fetch the not-yet-published aarch64 URLs
-          sed -i "s|^source_aarch64=.*|source_aarch64=()|" PKGBUILD
-          sed -i "s|^sha256sums_aarch64=.*|sha256sums_aarch64=()|" PKGBUILD
+          # The PKGBUILD has a SINGLE tarball source per arch (the tarball ships
+          # the official .deb's claude-desktop/ tree verbatim, Electron included -
+          # no separate Electron zip source to fetch/verify). Point the source for
+          # THIS arch at the local tarball so makepkg builds offline (the release
+          # isn't published yet), and neutralize the OTHER arch's source so
+          # nothing tries to fetch a URL that does not exist yet.
+          if [ "$TARGET_ARCH" = "aarch64" ]; then
+            TARBALL="claude-desktop-${VERSION}-linux-aarch64.tar.gz"
+            sed -i "s|^source_aarch64=.*|source_aarch64=(\"${TARBALL}\")|" PKGBUILD
+            sed -i "s|^sha256sums_aarch64=.*|sha256sums_aarch64=('SKIP')|" PKGBUILD
+            sed -i "s|^source_x86_64=.*|source_x86_64=()|" PKGBUILD
+            sed -i "s|^sha256sums_x86_64=.*|sha256sums_x86_64=()|" PKGBUILD
+          else
+            TARBALL="claude-desktop-${VERSION}-linux.tar.gz"
+            sed -i "s|^source_x86_64=.*|source_x86_64=(\"${TARBALL}\")|" PKGBUILD
+            sed -i "s|^sha256sums_x86_64=.*|sha256sums_x86_64=('SKIP')|" PKGBUILD
+            sed -i "s|^source_aarch64=.*|source_aarch64=()|" PKGBUILD
+            sed -i "s|^sha256sums_aarch64=.*|sha256sums_aarch64=()|" PKGBUILD
+          fi
 
           # Copy everything into a staging dir for the Docker bind-mount.
           # claude-desktop-bin.install must sit next to PKGBUILD (makepkg reads
           # the install= file relative to the PKGBUILD dir).
-          mkdir -p /tmp/pkgbuild-test
+          mkdir -p /tmp/pkgbuild-test dist
           cp PKGBUILD .SRCINFO claude-desktop-bin.install "$TARBALL" /tmp/pkgbuild-test/
 
           docker run --rm \
             --tmpfs /tmp/cross-device:exec,size=2g \
+            -e TARGET_ARCH \
             -v /tmp/pkgbuild-test:/input:ro \
+            -v "$(pwd)/dist:/output" \
             archlinux:base-devel \
             bash -c '
               set -euo pipefail
@@ -1642,6 +1680,18 @@ jobs:
               # Set up a non-root builder (makepkg refuses to run as root)
               useradd -m builder
               echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+              # Cross-arch packaging without an arm64 runner: the PKGBUILD only
+              # extracts a prebuilt tarball (no compiler is ever invoked, and
+              # options=(!strip) keeps binutils out of it), so flipping CARCH is
+              # enough to make makepkg select source_aarch64/optdepends_aarch64
+              # and emit a *-aarch64.pkg.tar.zst. The .PKGINFO + ELF assertions
+              # further down prove the result really is aarch64.
+              if [ "$TARGET_ARCH" = "aarch64" ]; then
+                sed -i "s|^CARCH=.*|CARCH=\"aarch64\"|" /etc/makepkg.conf
+                sed -i "s|^CHOST=.*|CHOST=\"aarch64-unknown-linux-gnu\"|" /etc/makepkg.conf
+                grep -E "^(CARCH|CHOST)=" /etc/makepkg.conf
+              fi
 
               # Use tmpfs as the build directory — tests on a different filesystem
               BUILD_DIR=/tmp/cross-device/pkgbuild
@@ -1659,6 +1709,39 @@ jobs:
                 echo "::error::makepkg produced no package file"
                 exit 1
               fi
+
+              # ── Positive architecture assertions ─────────────────────────
+              # Never report success on a false premise: assert the package
+              # metadata AND its payload are the architecture we asked for.
+              # (.PKGINFO arch comes from CARCH, so on its own it would still
+              # say "aarch64" if we had fed it the x86_64 tarball by mistake -
+              # hence the ELF e_machine check on the shipped Electron binary:
+              # byte 18-19 of the header, 0x003e = x86-64, 0x00b7 = AArch64.)
+              echo ""
+              echo "=== Architecture assertions ($TARGET_ARCH) ==="
+              echo "  package: $(basename "$PKG")"
+              PKG_ARCH=$(bsdtar -xOqf "$PKG" .PKGINFO | grep -E "^arch = " | head -1 | cut -d" " -f3)
+              echo "  .PKGINFO arch = ${PKG_ARCH:-<none>}"
+              if [ "$PKG_ARCH" != "$TARGET_ARCH" ]; then
+                echo "::error::.PKGINFO says arch = \"${PKG_ARCH:-<none>}\", expected \"$TARGET_ARCH\""
+                exit 1
+              fi
+              case "$TARGET_ARCH" in
+                aarch64) EXPECT_MACHINE="b700" ;;
+                x86_64)  EXPECT_MACHINE="3e00" ;;
+                *) echo "::error::unknown TARGET_ARCH \"$TARGET_ARCH\""; exit 1 ;;
+              esac
+              # `cat >/dev/null` drains the rest of the stream so bsdtar never
+              # takes a SIGPIPE (which pipefail would turn into a build failure).
+              ELF_MACHINE=$(bsdtar -xOqf "$PKG" usr/lib/claude-desktop-bin/claude \
+                | { od -An -tx1 -j18 -N2; cat >/dev/null; } | tr -d " \n")
+              echo "  Electron binary ELF e_machine = 0x${ELF_MACHINE} (expected 0x${EXPECT_MACHINE})"
+              if [ "$ELF_MACHINE" != "$EXPECT_MACHINE" ]; then
+                echo "::error::bundled Electron binary is not $TARGET_ARCH (e_machine 0x${ELF_MACHINE})"
+                exit 1
+              fi
+              echo "Architecture assertions passed"
+
               echo ""
               echo "=== namcap package lint ==="
               # namcap returns 0 even with warnings; grep for errors
@@ -1674,54 +1757,84 @@ jobs:
               fi
               echo "namcap passed (no dependency errors)"
 
-              # ── Install + launch smoke test ──────────────────────────────
+              # ── Install + launch smoke test (x86_64 only) ────────────────
               # This is the real pre-release gate: does the package actually
               # install and start on a clean Arch system? pacman -U resolves the
               # PKGBUILD depends() (alsa-lib gtk3 nss ...) exactly as a user
               # would get them — so a missing/wrong dependency FAILS here rather
-              # than shipping to AUR. Then we launch the installed binary under
-              # xvfb and confirm it survives startup (a missing Electron runtime
-              # lib would abort with exit 127).
-              echo ""
-              echo "=== Installing built package (resolves depends() via pacman) ==="
-              pacman -U --noconfirm "$PKG"
+              # than reaching our pacman repo. Then we launch the installed
+              # binary under xvfb and confirm it survives startup (a missing
+              # Electron runtime lib would abort with exit 127).
+              #
+              # Neither step is possible for the aarch64 package inside this
+              # amd64 container (pacman refuses a foreign-arch package and the
+              # arm64 Electron binary cannot execute), so they are skipped for
+              # that leg only - makepkg + namcap + the architecture assertions
+              # above remain its gate.
+              if [ "$TARGET_ARCH" != "x86_64" ]; then
+                echo ""
+                echo "=== Skipping pacman -U + xvfb launch smoke test ($TARGET_ARCH) ==="
+                echo "Cannot install or execute an $TARGET_ARCH package in an amd64 container."
+                echo "makepkg + namcap + the .PKGINFO/ELF assertions above are the $TARGET_ARCH gate."
+              else
+                echo ""
+                echo "=== Installing built package (resolves depends() via pacman) ==="
+                pacman -U --noconfirm "$PKG"
 
-              echo ""
-              echo "=== Launch smoke test (installed /usr/bin/claude-desktop under xvfb) ==="
-              pacman -S --noconfirm xorg-server-xvfb
+                echo ""
+                echo "=== Launch smoke test (installed /usr/bin/claude-desktop under xvfb) ==="
+                pacman -S --noconfirm xorg-server-xvfb
 
-              # The launcher falls back to a direct exec when user-systemd is
-              # absent (containers) and forwards extra args to Electron. We pass
-              # --no-sandbox explicitly: Docker blocks the user-namespace syscalls
-              # Chromium\x27s sandbox needs, so without it the app aborts in CI.
-              # (A real install keeps the sandbox — chrome-sandbox is shipped
-              # SUID-root and the launcher does not add this flag on a normal X11
-              # desktop.)
-              set +e
-              STDERR_LOG=$(mktemp)
-              xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
-                claude-desktop --no-sandbox 2>"$STDERR_LOG" &
-              APP_PID=$!
-              ELAPSED=0
-              CRASHED=0
-              while [ $ELAPSED -lt 15 ]; do
-                if ! kill -0 "$APP_PID" 2>/dev/null; then
-                  wait "$APP_PID"; EC=$?
-                  echo "::error::Installed app exited early after ${ELAPSED}s (exit $EC)"
-                  CRASHED=1
-                  break
+                # The launcher falls back to a direct exec when user-systemd is
+                # absent (containers) and forwards extra args to Electron. We pass
+                # --no-sandbox explicitly: Docker blocks the user-namespace syscalls
+                # Chromium\x27s sandbox needs, so without it the app aborts in CI.
+                # (A real install keeps the sandbox — chrome-sandbox is shipped
+                # SUID-root and the launcher does not add this flag on a normal X11
+                # desktop.)
+                set +e
+                STDERR_LOG=$(mktemp)
+                xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
+                  claude-desktop --no-sandbox 2>"$STDERR_LOG" &
+                APP_PID=$!
+                ELAPSED=0
+                CRASHED=0
+                while [ $ELAPSED -lt 15 ]; do
+                  if ! kill -0 "$APP_PID" 2>/dev/null; then
+                    wait "$APP_PID"; EC=$?
+                    echo "::error::Installed app exited early after ${ELAPSED}s (exit $EC)"
+                    CRASHED=1
+                    break
+                  fi
+                  sleep 1; ELAPSED=$((ELAPSED + 1))
+                done
+                echo "--- launcher/electron stderr ---"
+                cat "$STDERR_LOG"
+                echo "--------------------------------"
+                kill "$APP_PID" 2>/dev/null; wait "$APP_PID" 2>/dev/null
+                if [ "$CRASHED" = 1 ]; then
+                  exit 1
                 fi
-                sleep 1; ELAPSED=$((ELAPSED + 1))
-              done
-              echo "--- launcher/electron stderr ---"
-              cat "$STDERR_LOG"
-              echo "--------------------------------"
-              kill "$APP_PID" 2>/dev/null; wait "$APP_PID" 2>/dev/null
-              if [ "$CRASHED" = 1 ]; then
-                exit 1
+                set -e
+                echo "Install + launch smoke test passed — package installs and starts cleanly"
               fi
-              echo "Install + launch smoke test passed — package installs and starts cleanly"
+
+              # Hand the validated package to the runner: it is a RELEASE asset
+              # now (our signed pacman repo is hosted on the release), not a
+              # throwaway. Fail loud if the copy does not happen.
+              cp "$PKG" /output/
+              ls -la /output/
             '
+
+      - name: Upload Arch package (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package-${{ matrix.arch }}
+          path: dist/claude-desktop-bin-*-${{ matrix.arch }}.pkg.tar.zst
+          # A silently empty artifact would let the release job advertise a
+          # pacman repo with no package in it - fail instead.
+          if-no-files-found: error
+          retention-days: 1
 
   # ================================================================
   # Job 4: Release & Publish (fan-in — waits for ALL parallel jobs)
@@ -1773,10 +1886,23 @@ jobs:
           cp artifacts/rpm-x86_64/claude-desktop-bin-*.x86_64.rpm release-files/
           cp artifacts/rpm-aarch64/claude-desktop-bin-*.aarch64.rpm release-files/
 
-          # PKGBUILD (+ the .install file it references via install=)
-          cp artifacts/pkgbuild/PKGBUILD .
-          cp artifacts/pkgbuild/.SRCINFO .
-          cp artifacts/pkgbuild/claude-desktop-bin.install .
+          # PKGBUILD (+ the .install file it references via install=, + .SRCINFO).
+          # Published as release assets: the AUR push that used to be their only
+          # destination is gone, and users doing the `makepkg -si` fallback need
+          # PKGBUILD and claude-desktop-bin.install side by side.
+          cp artifacts/pkgbuild/PKGBUILD release-files/
+          cp artifacts/pkgbuild/.SRCINFO release-files/
+          cp artifacts/pkgbuild/claude-desktop-bin.install release-files/
+
+          # Arch packages: NOT copied into release-files/ here - the pacman
+          # repository step below needs them in a separate input dir (the repo
+          # script copies each package into its output dir itself), and that
+          # output is what lands in release-files/. Checksums are computed from
+          # the artifacts, which are byte-identical to what gets published.
+          PKG_X86_64=$(ls artifacts/arch-package-x86_64/claude-desktop-bin-*-x86_64.pkg.tar.zst)
+          PKG_AARCH64=$(ls artifacts/arch-package-aarch64/claude-desktop-bin-*-aarch64.pkg.tar.zst)
+          echo "pkg_x86_64_sha256=$(sha256sum "$PKG_X86_64" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "pkg_aarch64_sha256=$(sha256sum "$PKG_AARCH64" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
           # Compute all SHA256 checksums
           # Use ls + grep to avoid glob matching both tarballs
@@ -1791,6 +1917,137 @@ jobs:
           echo "rpm_aarch64_sha256=$(sha256sum release-files/claude-desktop-bin-*.aarch64.rpm | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
           ls -la release-files/
+
+      # ----------------------------------------------------------------
+      # Signed pacman repository - hosted on the RELEASE ASSETS, not on
+      # GitHub Pages: each package is ~170 MB and Pages already carries
+      # the apt + rpm repos. Users point pacman at
+      #   Server = https://github.com/<repo>/releases/latest/download
+      # with SigLevel = Required DatabaseRequired, so both the packages
+      # and the db must be detached-signed with the same key as the apt
+      # and rpm repos.
+      #
+      # Runs in an archlinux container: ubuntu-latest has no `repo-add`.
+      # The signing key is imported INSIDE the container (never into the
+      # runner's keyring) via a mounted file rather than an env var.
+      # ----------------------------------------------------------------
+      - name: Build signed pacman repository
+        id: pacman
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          mkdir -p pacman-repo pacman-in
+          cp artifacts/arch-package-x86_64/claude-desktop-bin-*-x86_64.pkg.tar.zst pacman-in/
+          cp artifacts/arch-package-aarch64/claude-desktop-bin-*-aarch64.pkg.tar.zst pacman-in/
+
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            # Same warn-and-skip convention as the APT deploy below. But a
+            # release whose notes advertise a repo that has no signed database
+            # would be a lie, so this path is NOT silent: we publish the bare
+            # packages only, record repo_available=false, and the release body
+            # prints an explicit note telling users to use `pacman -U` (which
+            # verifies against LocalFileSigLevel, not the repo SigLevel, so an
+            # unsigned local package still installs).
+            #
+            # Deliberately NOT a hard failure: this step runs BEFORE `Create
+            # GitHub Release`, so exiting non-zero here would publish NOTHING
+            # at all - no .deb, .rpm, AppImage or tarball either. That would
+            # punish a fork without the signing secret for an Arch-only gap.
+            # The repo itself is never half-advertised: repo_available=false
+            # rewrites the install instructions, and when the key IS present
+            # the assertions below refuse to publish an incomplete db.
+            echo "::warning::APT_GPG_PRIVATE_KEY secret not set - publishing bare Arch packages WITHOUT a pacman repository database"
+            cp pacman-in/*.pkg.tar.zst release-files/
+            echo "repo_available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          mkdir -p /tmp/pacman-gpg
+          printf '%s\n' "$GPG_PRIVATE_KEY" > /tmp/pacman-gpg/private.key
+          chmod 600 /tmp/pacman-gpg/private.key
+
+          docker run --rm \
+            -v "$(pwd):/work" \
+            -v /tmp/pacman-gpg:/gpg:ro \
+            -w /work \
+            archlinux:base-devel \
+            bash -c '
+              set -euo pipefail
+              pacman -Syu --noconfirm --needed gnupg
+
+              gpg --batch --import /gpg/private.key
+              # Same runtime key-id derivation as the apt/rpm steps - never a
+              # hardcoded fingerprint.
+              GPG_KEY_ID=$(gpg --show-keys --with-colons /gpg/private.key 2>/dev/null \
+                | grep "^sec:" | head -1 | cut -d: -f5)
+              if [ -z "$GPG_KEY_ID" ]; then
+                echo "::error::could not derive a signing key id from APT_GPG_PRIVATE_KEY"
+                exit 1
+              fi
+              echo "Signing pacman repository with key $GPG_KEY_ID"
+
+              for PKG in /work/pacman-in/*.pkg.tar.zst; do
+                bash /work/packaging/pacman/update-pacman-repo.sh \
+                  "$PKG" /work/pacman-repo "$GPG_KEY_ID"
+              done
+            '
+
+          rm -rf /tmp/pacman-gpg
+
+          # The container wrote as root into the workspace. Reclaim ownership so
+          # the later `git clean -fdx` and Cleanup steps can remove these paths
+          # and so the copy below can read them.
+          sudo chown -R "$(id -u):$(id -g)" pacman-repo pacman-in
+
+          # ── Positive end-state assertions ──────────────────────────────
+          # Never advertise a repo we have not verified. pacman with
+          # `SigLevel = Required DatabaseRequired` needs, per repo: <repo>.db,
+          # <repo>.db.sig, and a .sig next to every package; <repo>.files{,.sig}
+          # back `pacman -F`. Release assets cannot be symlinks (GitHub uploads
+          # the link target's bytes only if it is a real file), so repo-add's
+          # usual .db -> .db.tar.gz symlinks must have been materialised.
+          FAILED=0
+          for REPO_NAME in claude-desktop-bin claude-desktop-bin-aarch64; do
+            for SUFFIX in db db.sig files files.sig; do
+              F="pacman-repo/${REPO_NAME}.${SUFFIX}"
+              if [ ! -f "$F" ] || [ -L "$F" ]; then
+                echo "::error::pacman repo database file missing or not a real file: ${F}"
+                FAILED=1
+              fi
+            done
+            for SUFFIX in db.tar.gz db.tar.gz.sig files.tar.gz files.tar.gz.sig; do
+              F="pacman-repo/${REPO_NAME}.${SUFFIX}"
+              if [ ! -f "$F" ] || [ -L "$F" ]; then
+                echo "::warning::pacman repo companion file missing or not a real file: ${F}"
+              fi
+            done
+          done
+          if [ "$FAILED" != 0 ]; then
+            echo "::error::pacman repository is incomplete - refusing to publish a release that advertises it"
+            exit 1
+          fi
+
+          # Copy the whole (flat) repo into the release asset staging dir.
+          find pacman-repo -maxdepth 1 -type f -exec cp -f {} release-files/ \;
+
+          # The db is worthless without the packages it indexes, and each
+          # package needs its detached signature.
+          for PKG in pacman-in/*.pkg.tar.zst; do
+            BASE=$(basename "$PKG")
+            for F in "release-files/${BASE}" "release-files/${BASE}.sig"; do
+              if [ ! -f "$F" ]; then
+                echo "::error::missing pacman release asset: ${F}"
+                FAILED=1
+              fi
+            done
+          done
+          if [ "$FAILED" != 0 ]; then
+            exit 1
+          fi
+
+          echo "repo_available=true" >> $GITHUB_OUTPUT
+          echo "=== pacman repository assets ==="
+          ls -la pacman-repo/
 
       - name: Create GitHub Release
         env:
@@ -1812,7 +2069,10 @@ jobs:
         with:
           tag_name: ${{ needs.check-version.outputs.tag }}
           name: ${{ needs.check-version.outputs.release_name }}
-          files: release-files/*
+          # .SRCINFO is listed explicitly: the glob does not match dotfiles.
+          files: |
+            release-files/*
+            release-files/.SRCINFO
           body: |
             ## ${{ needs.check-version.outputs.release_name }}
 
@@ -1820,9 +2080,19 @@ jobs:
 
             ### Installation Options
 
-            **Arch Linux (AUR)**
+            **Arch Linux (pacman Repository - recommended)**
             ```bash
-            yay -S claude-desktop-bin
+            curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+            sudo pacman -Syu claude-desktop-bin
+            ```
+            ${{ steps.pacman.outputs.repo_available != 'true' && '> **NOTE:** this release ships NO signed pacman database (no signing key was available to the build), so the repository above will not serve it. Use the manual `pacman -U` command below instead.' || '' }}
+
+            **Arch Linux (manual package)**
+            ```bash
+            # x86_64
+            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-x86_64.pkg.tar.zst
+            # ARM64
+            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-aarch64.pkg.tar.zst
             ```
 
             **Debian/Ubuntu (APT Repository — recommended)**
@@ -1878,6 +2148,8 @@ jobs:
             ### Checksums
             | File | SHA256 |
             |------|--------|
+            | Arch pacman (x86_64) | `${{ steps.files.outputs.pkg_x86_64_sha256 }}` |
+            | Arch pacman (aarch64) | `${{ steps.files.outputs.pkg_aarch64_sha256 }}` |
             | Tarball (x86_64) | `${{ steps.files.outputs.tarball_sha256 }}` |
             | Tarball (aarch64) | `${{ steps.files.outputs.tarball_aarch64_sha256 }}` |
             | AppImage (x86_64) | `${{ steps.files.outputs.appimage_x86_64_sha256 }}` |
@@ -1891,7 +2163,6 @@ jobs:
             ${{ needs.check-version.outputs.changelog }}
 
             ### Links
-            - [AUR Package](https://aur.archlinux.org/packages/claude-desktop-bin)
             - [Full Changelog](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md)
           draft: false
           prerelease: false
@@ -1910,6 +2181,8 @@ jobs:
           DEB_FILE_ARM64="$(pwd)/release-files/claude-desktop-bin_${VERSION}-${PKGREL}_arm64.deb"
           RPM_FILE_X86_64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}.x86_64.rpm"
           RPM_FILE_AARCH64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}.aarch64.rpm"
+          PKG_FILE_X86_64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}-x86_64.pkg.tar.zst"
+          PKG_FILE_AARCH64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}-aarch64.pkg.tar.zst"
 
           if [ -z "$GPG_PRIVATE_KEY" ]; then
             echo "::warning::APT_GPG_PRIVATE_KEY secret not set — skipping repo deploy"
@@ -1929,6 +2202,9 @@ jobs:
           cp packaging/apt/install.sh "$REPO_DIR/"
           cp site/index.html "$REPO_DIR/"
           cp packaging/rpm/install-rpm.sh "$REPO_DIR/"
+          # The pacman repo itself lives on the release assets, but its
+          # bootstrap script is served from Pages like the apt/rpm ones.
+          cp packaging/pacman/install-pacman.sh "$REPO_DIR/"
           gpg --armor --export "$GPG_KEY_ID" > "$REPO_DIR/gpg-key.asc"
           touch "$REPO_DIR/.nojekyll"
 
@@ -1950,6 +2226,9 @@ jobs:
           RPM_ARCHS=""
           [ -f "$RPM_FILE_X86_64" ] && RPM_ARCHS="x86_64"
           [ -f "$RPM_FILE_AARCH64" ] && RPM_ARCHS="${RPM_ARCHS:+$RPM_ARCHS, }aarch64"
+          PACMAN_ARCHS=""
+          [ -f "$PKG_FILE_X86_64" ] && PACMAN_ARCHS="x86_64"
+          [ -f "$PKG_FILE_AARCH64" ] && PACMAN_ARCHS="${PACMAN_ARCHS:+$PACMAN_ARCHS, }aarch64"
 
           cat > "$REPO_DIR/badges/apt-repo.json" <<BADGE_EOF
           {
@@ -1965,6 +2244,16 @@ jobs:
             "schemaVersion": 1,
             "label": "RPM repo",
             "message": "v${VERSION}-${PKGREL} (${RPM_ARCHS:-none})",
+            "color": "blue"
+          }
+          BADGE_EOF
+
+          # pacman repo badge - README references badges/pacman-repo.json.
+          cat > "$REPO_DIR/badges/pacman-repo.json" <<BADGE_EOF
+          {
+            "schemaVersion": 1,
+            "label": "pacman repo",
+            "message": "v${VERSION}-${PKGREL} (${PACMAN_ARCHS:-none})",
             "color": "blue"
           }
           BADGE_EOF
@@ -2040,7 +2329,7 @@ jobs:
 
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
             echo "::error::SHA256 MISMATCH! Expected: ${EXPECTED_SHA}, Got: ${ACTUAL_SHA}"
-            echo "Aborting AUR push to prevent broken package."
+            echo "The published tarball does not match what we built - aborting before the master-branch commits."
             exit 1
           fi
 
@@ -2100,44 +2389,12 @@ jobs:
           rm -f /tmp/nix-tarball.tar.gz
           echo "Nix SRI hash (from v${VERSION} release): ${RELEASED_NIX_HASH}"
 
-      - name: Setup SSH for AUR
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
-
-          printf '%s\n' \
-            "Host aur.archlinux.org" \
-            "  User aur" \
-            "  IdentityFile ~/.ssh/aur" \
-            "  StrictHostKeyChecking no" \
-            >> ~/.ssh/config
-
-      - name: Push to AUR
-        env:
-          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
-          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
-          VERSION: ${{ needs.check-version.outputs.version }}
-          PKGREL: ${{ needs.check-version.outputs.pkgrel }}
-        run: |
-          git config --global user.name "$AUR_USERNAME"
-          git config --global user.email "$AUR_EMAIL"
-
-          git clone ssh://aur@aur.archlinux.org/claude-desktop-bin.git aur-repo
-
-          # PKGBUILD's install= points at claude-desktop-bin.install; ship it so
-          # users' makepkg finds it (it's checked out at repo root + also in the
-          # pkgbuild artifact, which the Organize step copied to root).
-          cp PKGBUILD .SRCINFO claude-desktop-bin.install aur-repo/
-
-          cd aur-repo
-          git add PKGBUILD .SRCINFO claude-desktop-bin.install
-          git diff --staged --quiet || {
-            git commit -m "Update to ${VERSION}-${PKGREL}"
-            git push origin master
-            echo "Successfully pushed to AUR"
-          }
+      # NOTE: there is deliberately no AUR push. The AUR package was deleted by
+      # the AUR admins after a "duplicate" request; the AUR git repo survives
+      # deletion, so pushing again would re-create the package we were removed
+      # from. Arch users are served by our own signed pacman repository on the
+      # release assets (built above), with the published PKGBUILD as a
+      # `makepkg -si` fallback.
 
       - name: Update README with new version
         env:
@@ -2157,7 +2414,7 @@ jobs:
           git diff --staged --quiet || {
             git commit -m "Update README install commands to v${VERSION}"
             git reset --hard HEAD
-            git clean -fdx --exclude=aur-repo
+            git clean -fdx
             git pull --rebase origin master
             git push origin master
           }
@@ -2180,7 +2437,7 @@ jobs:
           git diff --staged --quiet || {
             git commit -m "Update Nix package hash + .upstream-version for v${VERSION}"
             git reset --hard HEAD
-            git clean -fdx --exclude=aur-repo
+            git clean -fdx
             git pull --rebase origin master
             git push origin master
           }
@@ -2188,7 +2445,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf release-files artifacts ~/.ssh/aur
+          rm -rf release-files artifacts pacman-repo pacman-in /tmp/pacman-gpg
 
   # ================================================================
   # RPM Repository — runs on Fedora for native rpm-sign support
@@ -2365,7 +2622,7 @@ jobs:
             echo ""
             echo "Built + validated from the official Linux .deb:"
             echo "- .deb ingested, all patches applied (build-tarball + build-aarch64-tarball green)"
-            echo "- .deb/.rpm/.AppImage/Nix/AUR packaging jobs green"
+            echo "- .deb/.rpm/.AppImage/Nix/Arch-pacman packaging jobs green"
             echo "- tarball SHA256: ${TARBALL_SHA}"
             echo ""
             echo "Review the patch validation, then merge + run Build & Release"

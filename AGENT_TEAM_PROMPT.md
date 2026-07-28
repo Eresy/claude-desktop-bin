@@ -13,7 +13,7 @@ You coordinate teammates, plan work, and handle update strategy. You do NOT writ
 ## Project
 
 **claude-desktop-bin** (`/home/patrickjaja/development/claude-desktop-bin/`)
-   Repackages Anthropic's **official Claude Desktop Linux `.deb`** (apt repo `https://downloads.claude.ai/claude-desktop/apt`; bundles Electron 42.5.1 and a native Cowork VM backend) as native packages for the distros Anthropic does not ship (Arch/AUR, Fedora/RHEL, NixOS, AppImage) plus our own Debian/Ubuntu `.deb`.
+   Repackages Anthropic's **official Claude Desktop Linux `.deb`** (apt repo `https://downloads.claude.ai/claude-desktop/apt`; bundles Electron 42.5.1 and a native Cowork VM backend) as native packages for the distros Anthropic does not ship (Arch via our own pacman repo, Fedora/RHEL, NixOS, AppImage) plus our own Debian/Ubuntu `.deb`.
    Nim patches in `patches/` (compiled to native binaries) fix Linux-specific code in the minified Electron `app.asar` JS bundle and add our value-adds (Computer Use, custom themes, multi-profile, Quick Entry).
    Build: `./scripts/build-local.sh` (auto-downloads the latest official `.deb`, verifies it, extracts `app.asar`, patches, repackages).
    Install: `sudo pacman -U build/claude-desktop-bin-*-x86_64.pkg.tar.zst` (requires sudo — ASK the user).
@@ -121,7 +121,7 @@ After the cycle, STOP. Do not start a second cycle without the user's explicit g
 ## Guardrails — What Agents Must NOT Do
 
 - **Never modify the official `.deb` payload itself** — we only patch the extracted `app.asar` JS, never the upstream package internals beyond that.
-- **Never push to git remotes** — all work stays local. The user handles git push, AUR updates, and releases.
+- **Never push to git remotes** — all work stays local. The user handles git push and releases (which publish the APT, DNF and pacman repositories).
 - **Never run sudo** — ask the user for any privileged operation (package install, service restart as root).
 - **Never delete or overwrite existing patches** without understanding what they do first. Read the patch header comment and test before modifying.
 - **Never add complexity without justification** — SOLID, KIS, CLEAN CODE. If you can't explain why it's needed in one sentence, don't do it.

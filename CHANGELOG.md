@@ -1,6 +1,23 @@
 # Changelog
 
-All notable changes to claude-desktop-bin AUR package will be documented in this file.
+All notable changes to the claude-desktop-bin packages will be documented in this file.
+
+## 2026-07-28
+
+### Arch / Manjaro: install from our own signed pacman repository
+
+The `claude-desktop-bin` AUR package was deleted by the AUR maintainers after a third party filed a duplicate-package request against it. Rather than return to the AUR, Arch and Manjaro users are now served by our own pacman repository, matching how we already ship to Debian/Ubuntu and Fedora/RHEL:
+
+```bash
+curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+sudo pacman -Syu claude-desktop-bin
+```
+
+Packages and the repository database are GPG-signed with the same key as the APT and RPM repos (`SigLevel = Required DatabaseRequired`) and hosted as GitHub release assets. Updates arrive with `sudo pacman -Syu`; AUR helpers wrap pacman, so `yay -Syu` keeps working. Because flat release assets cannot express per-arch directories, the repo section is `[claude-desktop-bin]` on x86_64 and `[claude-desktop-bin-aarch64]` on aarch64 - the package name is `claude-desktop-bin` on both. The README documents the manual `pacman.conf` stanza for anyone who prefers not to pipe a script into `sudo bash`.
+
+Building from source stays supported for users who avoid third-party repositories: the `PKGBUILD` is still generated and CI-tested on every release, and it is now published as a release asset along with `.SRCINFO` and `claude-desktop-bin.install`, so `makepkg -si` works without an AUR clone.
+
+The AUR push step has been removed from the release workflow.
 
 ## 2026-07-27
 

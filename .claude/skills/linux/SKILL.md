@@ -23,7 +23,7 @@ Repackages Anthropic's **official Claude Desktop Linux `.deb`** (bundles Electro
 
 | Distro | Pkg | Min glibc | Arch |
 |---|---|---|---|
-| Arch | AUR | 2.41 | x86_64, aarch64 |
+| Arch | own pacman repo | 2.41 | x86_64, aarch64 |
 | Ubuntu 22.04+ | deb | 2.35 | amd64, arm64 |
 | Debian 12+ | deb | 2.36 | amd64, arm64 |
 | Fedora 40+ | rpm | 2.39 | x86_64, aarch64 |
