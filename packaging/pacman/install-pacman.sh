@@ -60,6 +60,13 @@ if [ -z "$KEY_ID" ]; then
   exit 1
 fi
 
+# --lsign-key needs the keyring's own local signing key ("Pacman Keyring Master
+# Key"). A normal Arch install already has one, but containers, chroots and
+# wiped keyrings do not, and there the failure is a cryptic "There is no secret
+# key available to sign with". --init is idempotent (it only creates what is
+# missing and never drops existing keys), so run it unconditionally first.
+pacman-key --init
+
 # Both steps are required: --add imports the key into the pacman keyring,
 # --lsign-key signs it with the machine's local key so pacman actually trusts it.
 # Without the local signature every package from this repo is rejected.

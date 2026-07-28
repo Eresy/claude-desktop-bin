@@ -19,6 +19,8 @@ Building from source stays supported for users who avoid third-party repositorie
 
 The AUR push step has been removed from the release workflow.
 
+`install-pacman.sh` runs `pacman-key --init` before importing the key. A normal Arch install already has the keyring's local signing key, but containers, chroots and wiped keyrings do not, and without it `--lsign-key` fails with a cryptic "There is no secret key available to sign with".
+
 ## 2026-07-27
 
 ### Fix: Nix sign-in did not persist across restarts (libsecret dropped from the closure)
