@@ -258,7 +258,7 @@ curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc | gpg --
 # The printed fingerprint must match the value above.
 ```
 
-The user id was changed in July 2026 (it previously read `<claude-desktop-linux@users.noreply.github.com>`, an address belonging to no account) and reaches the published key with the next release, so a key downloaded before then still shows the old user id. **The key itself is unchanged** - same key, same fingerprint - so the check above succeeds either way, and nothing needs re-importing; a keyring imported earlier keeps verifying every package correctly.
+The user id was changed in July 2026 (it previously read `<claude-desktop-linux@users.noreply.github.com>`, an address belonging to no account). **The key itself is unchanged** - same key, same fingerprint - so nothing needs re-importing: a keyring imported earlier keeps verifying every package and repository database correctly, and simply shows the old user id until the key is next imported. If you do re-import it, re-run `pacman-key --lsign-key` as well, since the local signature has to move to the current user id.
 
 ## Computer Use
 
