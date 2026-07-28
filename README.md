@@ -50,8 +50,6 @@ Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise infere
 
 ## Installation
 
-> **Upgrading from an older release? (temporary note)** Cowork is now bundled directly in the app (Anthropic ships it in the official `.deb` we repackage), so the separate `claude-cowork-service` daemon has been **deprecated and fully removed** - you can uninstall it. In exchange, Cowork now needs a QEMU/KVM setup on the host (this is a breaking change). Even if you've been a user for a while, please walk through your distro's section below step by step and install the **Cowork** optional dependencies + join the `kvm` group. See [Cowork setup](#cowork-setup-needs-devkvm) for details.
-
 Pick your distro below. [Computer Use](#computer-use) works out of the box everywhere - all backends are bundled, nothing to install. The only optional dependency to care about is **Cowork** (agent workspace VM), listed per distro.
 
 ### Arch Linux / Manjaro (Pacman Repository)
