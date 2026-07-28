@@ -21,6 +21,16 @@ The AUR push step has been removed from the release workflow.
 
 `install-pacman.sh` runs `pacman-key --init` before importing the key. A normal Arch install already has the keyring's local signing key, but containers, chroots and wiped keyrings do not, and without it `--lsign-key` fails with a cryptic "There is no secret key available to sign with".
 
+### Manual pacman setup now pins the key fingerprint
+
+The manual `pacman.conf` instructions (README, under "Advanced") previously read the key id out of the `.asc` file they had just downloaded and locally signed that - trust-on-first-use, which would have accepted a substituted key without complaint. They now print the fingerprint, state the expected value, and pass the full fingerprint to `pacman-key --lsign-key`, so the key is checked against a value published in git before it is trusted. They also run `pacman-key --init`, which the install script already did and the manual path did not.
+
+### Repository signing key: user id now names the maintainer
+
+The signing key's user id read `Claude Desktop Linux <claude-desktop-linux@users.noreply.github.com>`, an address belonging to no GitHub account. It now reads `Claude Desktop Linux (claude-desktop-bin repo signing key) <patrickjajaa@gmail.com>`. The old user id is revoked, and the revocation is published together with the key.
+
+**The key itself is unchanged** - same RSA 4096 key, same fingerprint `825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867`, same key id `382409F597908867`. A user id is not part of an OpenPGP fingerprint, so there is nothing to re-import: existing keyrings keep verifying every package and repository database exactly as before, and simply show the old user id until the key is next imported. Packages signed before and after the change verify against the same key.
+
 ## 2026-07-27
 
 ### Fix: Nix sign-in did not persist across restarts (libsecret dropped from the closure)

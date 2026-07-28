@@ -248,7 +248,7 @@ ARM64 `.deb`, `.rpm`, AppImage, and Nix packages are available for **Raspberry P
 The APT, DNF and pacman repositories are GPG-signed with the same key. The install scripts import it from GitHub Pages over HTTPS. To verify the key out-of-band, compare its fingerprint against the value published here (this README lives in the git repo, a separate channel from the Pages-hosted key):
 
 ```
-Key:         Claude Desktop Linux <claude-desktop-linux@users.noreply.github.com>
+Key:         Claude Desktop Linux (claude-desktop-bin repo signing key) <patrickjajaa@gmail.com>
 Type:        RSA 4096
 Fingerprint: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867
 ```
@@ -257,6 +257,8 @@ Fingerprint: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc | gpg --show-keys --with-fingerprint
 # The printed fingerprint must match the value above.
 ```
+
+The user id was changed in July 2026 (it previously read `<claude-desktop-linux@users.noreply.github.com>`, an address belonging to no account). **The key itself is unchanged** - same key, same fingerprint - so nothing needs re-importing; a keyring imported earlier keeps verifying every package correctly and simply shows the old user id until it is re-imported.
 
 ## Computer Use
 
