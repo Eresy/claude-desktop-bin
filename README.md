@@ -50,7 +50,7 @@ Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise infere
 
 ## Installation
 
-Pick your distro below. [Computer Use](#computer-use) works out of the box everywhere - all backends are bundled, nothing to install. The only optional dependency to care about is **Cowork** (agent workspace VM), listed per distro.
+Pick your distro below. [Computer Use](#computer-use) works out of the box everywhere - all backends are bundled, nothing to install. The only optional dependency to care about is **Cowork** (agent workspace VM), listed per distro - it needs QEMU/KVM on the host, see [Cowork setup](#cowork-setup-needs-devkvm).
 
 ### Arch Linux / Manjaro (Pacman Repository)
 ```bash
