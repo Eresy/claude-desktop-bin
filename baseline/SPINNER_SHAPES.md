@@ -1,24 +1,42 @@
 # Spinner Shapes - Per-Theme Brand-Glyph Replacements
 
 **Companion to** [SPINNER_INJECTION_NOTES.md](SPINNER_INJECTION_NOTES.md) (the injection
-design) and `scratchpad/THEME_REFACTOR_CONTRACT.md` (the dual-variant theme contract).
+design) and [themes/README.md](../themes/README.md) (the dual-variant theme contract as
+theme authors see it).
 
-This doc catalogs the actual spinner SVG shapes shipped per theme: what each shape is,
-its path data, its color strategy, and how to swap/test one live in the running app.
+This doc catalogs the spinner SVG shapes shipped per theme: what each shape is, its path
+data, its color strategy, and how to swap/test one live in the running app.
 
-- **Runtime installer:** `js/spinner_injector.js` (a self-guarding ES5 IIFE).
-- **Per-theme specs:** `scratchpad/spinner_specs.json` (merged into each theme's
-  `spinner` key at integration by the orchestrator; themes ship `"spinner": null`).
+**Every bundled palette ships a spinner.** All 97 - the 7 curated built-ins, the 6 gaming
+palettes, and the 84 community palettes - replace claude.ai's brand star with a glyph
+drawn for that palette's name or colors.
+
+- **Runtime engine:** `js/spinner_injector.js` (a self-guarding ES5 IIFE that installs
+  `window.__cdbSpinnerApply(spec|null)` once per window).
+- **Where the specs live:**
+  | Tier | Spec source |
+  |------|-------------|
+  | curated built-ins (7) | inline in `patches/add_feature_custom_themes.nim` |
+  | gaming (6) | `js/gaming_themes.json` |
+  | community (84) | curated in `scripts/community-spinners.json`, merged into `js/community_themes.json` by `scripts/generate-community-themes.mjs` |
+  | your own themes | the `spinner` key of your theme in `claude-desktop-bin.jsonc` |
 - **How it runs:** the Nim patch prepends `var __CDB_SPINNER_SPEC = <json|null>;` to the
-  injector and runs it via the same `wc.executeJavaScript(...)` that injects theme CSS.
-  The injector finds the Anthropic 7-point brand-star (`viewBox "0 0 100 100"` +
-  a child `<path d>` starting with `m19.6 66.5 19.7-11`) and replaces its `<path>`
-  children with the spec's paths, keeping the `<svg>` wrapper so the `fill-current`
-  accent and box size are preserved.
+  injector and evaluates it through the same `wc.executeJavaScript(...)` that injects
+  theme CSS - on `dom-ready` **and again on every theme switch**. The injector finds the
+  Anthropic 7-point brand-star (`viewBox "0 0 100 100"` + a child `<path d>` matching a
+  star signature) and replaces its `<path>` children with the spec's paths, keeping the
+  `<svg>` wrapper so the `fill-current` accent and box size are preserved.
+- **Build-time gate:** every bundled spec is parsed and validated while the Nim patch
+  compiles (`validateSpinner`): `paths` must hold at least one real `{d}` entry, any
+  `fill` must be a string, `animation` must be one of `pulse|spin|bounce|flip`, and
+  `paths2` must be present exactly when the animation is `flip`. A contract violation
+  fails the build loud rather than shipping a broken glyph. The community generator adds
+  its own gates: slug parity in both directions against the theme set, an SVG path-data
+  tokenizer, and a >= 2.5:1 contrast check for any explicit `fill` against both variants'
+  background.
 
 > **All shapes:** `viewBox "0 0 100 100"`, centered, ~60-75% of the box, verified
-> recognizable at 32px (the `w-8` greeting / thinking-spinner size). Renders checked with
-> `rsvg-convert` at 256px and 32px.
+> recognizable at 32px (the `w-8` greeting / thinking-spinner size).
 
 ---
 
@@ -27,26 +45,40 @@ its path data, its color strategy, and how to swap/test one live in the running 
 ```jsonc
 "spinner": {
   "viewBox": "0 0 100 100",          // optional, default "0 0 100 100"
-  "match": "m19.6 66.5 19.7-11",     // optional override of the star path signature
-  "animation": "spin|bounce|pulse|null",
-  "paths": [ { "d": "...", "fill": "#hex" }, ... ]   // omit "fill" => currentColor
+  "match": "m19.6 66.5 19.7-11",     // optional override of the star signature (string or array)
+  "animation": "spin|bounce|pulse|flip|null",
+  "paths":  [ { "d": "...", "fill": "#hex" }, ... ],  // omit "fill" => currentColor
+  "paths2": [ { "d": "...", ... }, ... ]              // REQUIRED iff animation is "flip"
 }
 ```
 
+A theme object may also carry a top-level **`category`** string. `"category": "gaming"`
+puts the theme in the Gaming section of the picker and of Settings -> Extra -> Themes,
+independently of which tier it resolves from.
+
 **Color strategy:** a path with **no `fill`** (or `fill: "currentColor"`) inherits the
 theme accent through the `<svg>`'s `fill-current` class (which resolves `currentColor`
-to `--accent-brand`). An **explicit hex** pins a fixed color - needed only for the
-multi-color Mario mushroom. Every single-color shape below omits `fill` so it follows
-the theme's brand accent.
+to `--accent-brand`). An **explicit hex** pins a fixed color - needed only where the
+shape's identity is its colors (the Mario mushroom, the Dragon Ball). Every single-color
+shape below omits `fill` so it follows the theme's brand accent.
 
-**Animation:** adds a `cdb-anim-<spin|bounce|pulse>` class to the replaced `<svg>`. The
-keyframes live in the theme CSS (`insertCSS` path), not the injector. `spin` rotates
-about the glyph center (`transform-box: fill-box`), `bounce` is a vertical hop, `pulse`
-is an opacity throb. Set `null` to inherit only claude.ai's own motion.
+**Animation:** adds a `cdb-anim-<name>` class to the replaced `<svg>`. The keyframes live
+in the theme CSS (`insertCSS` path), not the injector, and **all five are emitted for
+every theme** so a live switch can never land on a shape whose animation has no
+keyframes. `spin` rotates about the glyph center (`transform-box: fill-box`), `bounce` is
+a vertical hop, `pulse` is an opacity throb. Set `null` to inherit only claude.ai's own
+motion.
+
+**`flip` - the two-frame sprite cycle.** `flip` renders **both** frames at once, each in
+its own `<g data-cdb-frame="1|2">`, and a `steps(2, jump-none)` keyframe pair swaps their
+opacity at ~2 frames/sec. The result reads as a retro two-frame sprite animation (a hero
+taking a step, a peon swinging a pick) rather than a tween. `paths2` is what frame 2
+draws; a `flip` spec without it is refused, and a `paths2` on any other animation is
+ignored with a diagnostic line.
 
 ---
 
-## The 7 shapes
+## The 7 built-in shapes
 
 | Theme | Shape | Paths | Color | Animation |
 |-------|-------|-------|-------|-----------|
@@ -61,20 +93,24 @@ is an opacity throb. Set `null` to inherit only claude.ai's own motion.
 The three `catppuccin-*` dark variants intentionally **share** the cat-head shape; only
 `catppuccin-latte` (the light variant) gets the coffee cup.
 
+`mario` also carries `"category": "gaming"`, so it appears in the Gaming section of the
+picker alongside the six palettes below while still resolving as a built-in.
+
 ---
 
 ### 1. `mario` - Mario mushroom (8 paths, multi-color, `bounce`)
 
-The 8-path mushroom straight from [SPINNER_INJECTION_NOTES.md](SPINNER_INJECTION_NOTES.md)
+The 8-path mushroom from [SPINNER_INJECTION_NOTES.md](SPINNER_INJECTION_NOTES.md)
 section 5: domed red cap, three white spots, a pale face/stem band, two dark eyes, and a
-dark outline drawn first (behind). This is the only shape that does **not** follow the
+dark outline drawn first (behind). This is the only built-in that does **not** follow the
 accent - its colors are baked so it always looks like the canonical mushroom.
 
 Colors: `#E52521` cap, `#FFFFFF` spots, `#FAD9C0` face, `#3A2A1A` outline + eyes.
 Build order matters: outline first (behind), then cap, face, spots, eyes on top.
 
-(Full path array: see `scratchpad/spinner_specs.json` -> `mario.paths`, identical
-to the 8-path block in the injection notes.)
+(Full path array: the `mario` entry of `__cdb_builtins` in
+`patches/add_feature_custom_themes.nim`, identical to the 8-path block in the injection
+notes.)
 
 ---
 
@@ -106,8 +142,8 @@ Follows the theme accent.
   concatenated into one path (nonzero fill-rule).
 - Color: `currentColor` (no `fill`).
 
-The path is long (~1.5 KB, 31 sub-shapes); see `scratchpad/spinner_specs.json` ->
-`nord.paths[0].d` for the literal string. It begins:
+The path is long (31 sub-shapes); see the `nord` entry of `__cdb_builtins` in
+`patches/add_feature_custom_themes.nim` for the literal string. It begins:
 
 ```
 M50 53.2 L90 53.2 L90 46.8 L50 46.8 Z M67.92 51.2 L72.42 58.99 ...  (31 subpaths) ... M44 50 a 6 6 0 1 0 12 0 a 6 6 0 1 0 -12 0 z
@@ -125,10 +161,8 @@ theme accent.
 - **Winding gotcha:** the two ears must wind the **same rotational direction as the face
   circle**, or the nonzero fill-rule punches a hole where an ear overlaps the dome (one
   ear comes out clean, the mirror ear shows a white notch). The shipped ears use the
-  matching winding (verified: `scratchpad/dbg_cat3_AB.png`, "option B"). If you edit the
-  ears, re-render and confirm both connect seamlessly.
-- Color: `currentColor` (no `fill`). Falls back to a paw print only if a cat proves hard
-  - the cat renders cleanly, so cat it is.
+  matching winding. If you edit the ears, re-render and confirm both connect seamlessly.
+- Color: `currentColor` (no `fill`).
 
 ```
 M26 45 L49 34 L19 13 Z M74 45 L81 13 L51 34 Z M23 55 a 27 27 0 1 0 54 0 a 27 27 0 1 0 -54 0 z
@@ -154,13 +188,112 @@ M23 54 L65 54 L60 84 L28 84 Z M22 87 L66 87 L61 91 L27 91 Z M65 57 A 13 13 0 1 1
 
 ---
 
+## The 6 gaming shapes
+
+Defined in `js/gaming_themes.json` next to their palettes; each carries
+`"category": "gaming"`.
+
+| Theme | Shape | Frames | Color | Animation |
+|-------|-------|--------|-------|-----------|
+| `playstation` | the four controller button glyphs - triangle, circle, cross, square - in a diamond | 1 (7 subpaths) | currentColor | `spin` |
+| `gameboy` | d-pad: a plus with four rounded lobes and a center pivot | 1 (6 subpaths) | currentColor | `pulse` |
+| `final-fantasy` | faceted crystal, pointed base, facet lines | 1 (6 subpaths) | currentColor | `pulse` |
+| `zelda` | hero silhouette mid-step, sword raised | 2 (10 subpaths each) | currentColor | `flip` |
+| `warcraft` | peon silhouette swinging a pick | 2 (14 subpaths each) | currentColor | `flip` |
+| `dragonball` | 4-star dragon ball: orange sphere, four red stars | 5 | multi-color (`#f57c1f`, `#c62828`) | `spin` |
+
+Notes on the two-frame pair:
+
+- **`zelda`** frames differ only in the legs and the sword arm - frame 1 plants the left
+  leg forward, frame 2 swaps them, so the `flip` cycle reads as walking.
+- **`warcraft`** frames differ in the pick's angle over the shoulder, so it reads as a
+  swing rather than a hop.
+- Both frames must draw the same silhouette anchor (head, body) at identical coordinates;
+  if the torso moves between frames the flip looks like a jitter instead of a stride.
+
+`dragonball` is the second multi-color shape: the sphere and the stars are pinned so the
+ball stays orange-and-red in every variant, and `spin` rotates the whole ball. Its fills
+clear the 2.5:1 contrast gate against both variants' backgrounds.
+
+---
+
+## The 84 community glyphs
+
+Curated in `scripts/community-spinners.json` - one entry per community slug, each with a
+`concept` note, an `animation`, and the path data. `scripts/generate-community-themes.mjs`
+merges them into `js/community_themes.json` at generation time, so regeneration stays one
+command:
+
+```bash
+node scripts/generate-community-themes.mjs /path/to/community-palettes
+```
+
+The glyphs are derived from each palette's **name or colors**, which is why there are
+**53 distinct designs across 84 slugs** - families share a shape on purpose:
+
+| Example | Shape |
+|---------|-------|
+| `everdeer` | antlered stag head |
+| `nord-aurora` | aurora curtain ribbons |
+| the `kanagawa-*` family | great-wave curl |
+| every `catppuccin-*` accent variant | one curled sleeping cat |
+| `zenbones` | zen brush circle (one unbroken ensō stroke) |
+| `tokyo-night-moon` | bold crescent moon |
+
+Animation spread: 62 `pulse`, 12 `spin`, 6 `flip`, 4 `bounce`. The six `flip` glyphs are
+`cyberpunk` (glitching cyber chevrons), the three gruvbox-family palettes
+`gruber-darker` / `gruvbox-material` / `gruvboxalt` (blinking terminal cursor), `mine`
+(swinging pickaxe) and `monochrome` (checker-diamond flicker).
+
+The generator hard-fails on: a slug in one file and not the other (checked both
+directions), a spec that violates the schema, `d` data that does not tokenize as SVG path
+data, or an explicit `fill` under 2.5:1 against either variant's background.
+
+---
+
+## Live switching (no restart)
+
+A theme switch - from the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker, from
+Settings -> Extra -> Themes, or reverting to **Claude default** - re-themes the loading
+glyph immediately in every open window. Nothing about a theme switch needs a restart any
+more.
+
+The engine makes that possible by **never losing the original glyph**:
+
+1. The first time an `<svg>` is reshaped, its untouched children and `viewBox` are
+   stashed on the element (`__cdbSpinnerOrig`). The first stash is also kept as a
+   document-wide fallback, so a glyph the SPA cloned from one of ours can still be
+   restored.
+2. Reshaped elements are tracked in a `MANAGED` list, pruned as the SPA detaches them.
+3. `window.__cdbSpinnerApply(spec)` re-renders every managed element with the new spec
+   and then sweeps the document for glyphs it has not seen yet.
+4. `window.__cdbSpinnerApply(null)` restores the stashed markup, drops the
+   `cdb-anim-*` class and the `data-cdb-spinner` stamp, and empties the list - which is
+   what "Claude default" does.
+
+Two consequences worth knowing:
+
+- **The engine installs once per window.** Re-running `js/spinner_injector.js` with a new
+  spec prepended does **not** install a second observer; it only calls `apply()` with the
+  new spec. The main process re-runs the file per window on every switch.
+- **The MutationObserver always installs the current spec**, not the one baked in at
+  injection time, so glyphs rendered after a switch get the new shape.
+
+A malformed spec is **refused** with a `[spinner] refusing spinner spec: ...` line and
+the glyph on screen is left as it is - never a half-built SVG.
+
+Hand-editing `claude-desktop-bin.jsonc` still needs a restart, because that file is read
+at startup.
+
+---
+
 ## How to swap or test a shape live (no rebuild)
 
 The injector is designed for live iteration in the webview DevTools console.
 
 1. Open the claude.ai webview DevTools (right-click -> Inspect on the chat view).
-2. Define a spec, then paste the injector body. Pick any shape from
-   `scratchpad/spinner_specs.json`, e.g. the cat:
+2. Define a spec, then paste the injector body. Pick any shape from the spec sources
+   above, e.g. the cat:
 
    ```js
    window.__CDB_SPINNER_SPEC = {
@@ -171,44 +304,61 @@ The injector is designed for live iteration in the webview DevTools console.
    // then paste the entire contents of js/spinner_injector.js
    ```
 
-3. Expect a console line `[spinner] matched N glyph(s) on load`. The greeting icon and
-   the thinking spinner should switch to the new shape; `currentColor` paths follow the
-   theme accent.
-4. Re-run a sweep manually: `window.__cdbSpinner.sweep(document.documentElement)`.
-   Stop the observer: `window.__cdbSpinner.disconnect()`. Inspect the active spec:
+3. Expect a console line `[spinner] themed N glyph(s) (0 re-themed, N new)`. The greeting
+   icon and the thinking spinner should switch to the new shape; `currentColor` paths
+   follow the theme accent.
+4. Iterate without re-pasting the file: `window.__cdbSpinnerApply({...next spec...})`
+   re-themes in place, and `window.__cdbSpinnerApply(null)` (or
+   `window.__cdbSpinner.restore()`) puts Claude's own star back.
+5. Re-run a sweep manually: `window.__cdbSpinner.sweep(document.documentElement)`.
+   Count what the engine owns: `window.__cdbSpinner.managed()`. Stop the observer:
+   `window.__cdbSpinner.disconnect()`. Inspect the active spec:
    `window.__cdbSpinner.spec`.
+
+Note that the CSS keyframes come from the theme sheet, not the injector, so a bare
+console paste on an unthemed page renders the shape without its motion. Apply a theme
+first if you want to judge the animation.
 
 ### Authoring / verifying a new shape offline
 
-Shapes were built and visually verified with `scratchpad/build_shapes.py`, which renders
-each path to PNG at 256px (inspect) and 32px (real spinner size) via `rsvg-convert`. To
-add or tweak a shape: edit the builder, re-render, eyeball the contact sheet, then copy
-the path string into `scratchpad/spinner_specs.json`.
+Shapes are authored as literal path strings and checked at 256px (inspect) and 32px (real
+spinner size) with `rsvg-convert`, then pasted into the spec source for their tier. A
+quick contact sheet at spinner size is the fastest way to catch a shape that only reads
+when large:
 
 ```bash
-cd scratchpad
-python3 build_shapes.py                       # writes shape_<name>.png + shape_<name>_32.png
-magick shape_*_32.png +append -filter point -resize 400% sheet.png   # small-size sanity sheet
+magick shape_*_32.png +append -filter point -resize 400% sheet.png
 ```
 
-Functional logic of the injector (matcher precision, multi-path, fill handling,
-idempotency, no-op-on-null) is covered by `scratchpad/test_injector.js` against a minimal
-DOM shim:
+The engine's own behavior is covered by three suites that `scripts/validate-patches.sh`
+runs:
 
 ```bash
-node scratchpad/test_injector.js scratchpad/spinner_specs.json mario js/spinner_injector.js
+node scripts/test-spinner-main.mjs    # main process: what a switch PUSHES to each window
+node scripts/test-spinner-dom.mjs     # headless Chromium: re-theme, revert, flip frames
+node scripts/test-picker-gaming.mjs   # picker sections incl. Gaming
 ```
+
+`test-spinner-dom.mjs` is the one that settles the questions a regex cannot: that a
+second spec really reshapes a glyph the engine already swapped, that reverting restores
+markup the matcher can find the star in again, and that the `flip` frames resolve against
+the `steps()` keyframes the theme sheet ships.
 
 ---
 
 ## Maintenance notes (version-sensitive)
 
-- **`matched 0` in the console = the logo geometry drifted**, not "feature removed". The
-  star path signature (`m19.6 66.5 19.7-11`) is remote-rendered claude.ai geometry this
-  repo cannot pin. Per-theme `match` overrides it without a rebuild.
+- **`themed 0` in the console = the logo geometry drifted**, not "feature removed". The
+  star signatures are remote-rendered claude.ai geometry this repo cannot pin. The
+  matcher carries three fragments of different rays so a single re-emitted coordinate run
+  does not break it, and a per-theme `match` (string or array) overrides the set entirely
+  without a rebuild.
 - **Don't switch the injector to `innerHTML`** - it uses `createElementNS` deliberately
   (CSP / Trusted-Types safe for SVG).
 - **Editing the cat ears or any union-of-subpaths shape:** re-render and confirm winding;
   a mismatched sub-path winding silently punches a hole under nonzero fill-rule.
-- **The mushroom is the only multi-color shape.** Keep every other shape single-path
-  `currentColor` so it tracks the theme accent.
+- **Two shapes are multi-color** (`mario`, `dragonball`). Keep every other shape
+  single-color `currentColor` so it tracks the theme accent.
+- **Adding a `flip` shape:** author `paths2` in the same commit. The build asserts the
+  pairing, so a missing second frame fails the build rather than shipping a static glyph
+  with a flicker class.

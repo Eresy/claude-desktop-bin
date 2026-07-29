@@ -13,10 +13,77 @@ The same theme, both variants - toggle Settings -> Appearance to switch:
 |-------------------|--------------------|
 | ![Mario light](mario/2026-06-26_14-46-chat-light.png) | ![Mario dark](mario/2026-06-26_14-46-chat-dark.png) |
 
-Note the loading glyph: each theme can replace Claude's starburst with a custom
-SVG spinner (Mario gets a mushroom). See [SPINNER_SHAPES.md](../baseline/SPINNER_SHAPES.md).
+Note the loading glyph: every bundled theme replaces Claude's starburst with its own
+SVG spinner (Mario gets a mushroom), and your own themes can too. See
+[SPINNER_SHAPES.md](../baseline/SPINNER_SHAPES.md).
 
-## What's new: dual light/dark variants
+## Theme picker (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>)
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> in any Claude Desktop window to open
+the picker: a searchable gallery of every theme available to you - your own themes, the
+gaming palettes, the built-ins, and the bundled community palettes - each in its own
+divider-separated section, each card showing a dark row and a light row of swatches so you
+can judge a palette before wearing it.
+
+Click a card and the theme applies immediately, in every open window. No restart, no
+editing a file by hand. The picker then writes your choice into
+`~/.config/Claude/claude-desktop-bin.jsonc`, replacing only the `activeTheme` value
+and leaving every comment and every other key exactly as you had them. If that file
+does not exist yet, the picker creates it with a short commented template.
+
+| Key | Action |
+|-----|--------|
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> | open the picker; press it again inside the picker to close it |
+| <kbd>/</kbd> | jump to the filter field |
+| arrows / <kbd>Tab</kbd> | move between cards |
+| <kbd>Enter</kbd> | apply the focused theme |
+| <kbd>Esc</kbd> | close |
+
+The **Claude default** card at the top reverts to Claude's own palette: it removes
+the injected CSS from every window and saves an empty `activeTheme`.
+
+**Every part of a theme switches instantly** - surfaces, text, accents, borders, status
+colors, the `chatFont` override, any `customCss`, and the **spinner shape**: the loading
+glyph takes the new theme's shape and animation in every open window, and reverting to
+Claude default puts Claude's own star back. Nothing about switching needs a restart.
+(Hand-editing the config file still does, since that file is read at startup.)
+
+## Settings -> Extra (in the app's own dialog)
+
+The same registry is also reachable without a hotkey. Open Claude's Settings dialog and
+you'll find an **Extra** group in the nav with two entries:
+
+- **Themes** - every theme available to you as a row with color dots, in the same
+  sections as the picker (your themes, Gaming, built-in, community). Clicking one applies
+  it live - colors and spinner both - and saves `activeTheme` the same way the picker
+  does, into `claude-desktop-bin.jsonc` with your comments intact.
+- **Features** - the 134 catalogued GrowthBook feature flags as switches, so you can
+  browse and flip them without hand-editing a config file. See
+  [Feature Flag Overrides](../README.md#feature-flag-overrides-advanced) for what the
+  flags are.
+
+The Features panel starts from what your account actually gets: flags upstream already
+enables show up switched on, and turning one off writes an explicit `false`. Flags that
+carry a value rather than a switch are listed read-only, and the one flag that breaks
+Cowork when enabled is not toggleable at all. Anything you set by hand in
+`claude-desktop-bin.jsonc` is shown as `.jsonc`-owned and left to that file - the
+hand-edited value wins per flag ID, and the panel will not fight it.
+
+Where the two panels save differs, because they answer to different files:
+
+| Panel | Writes | Takes effect |
+|-------|--------|--------------|
+| Themes | `activeTheme` in `claude-desktop-bin.jsonc` (comment-preserving) | live, in every open window |
+| Features | `growthbookOverrides` in `claude-desktop-bin.json` | after a restart |
+
+Flag changes need a restart because the features they gate are wired up when the app
+starts, so the panel says so and offers a **Restart now** button.
+
+The Extra group is injected into Settings, which is claude.ai markup this package does
+not control. The <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker is entirely local
+and always available, so it is the reliable way to change a theme.
+
+## Dual light/dark variants
 
 Each theme ships **two** palettes - a `light` block and a `dark` block. The patch
 injects them on mode-scoped selectors:
@@ -26,11 +93,8 @@ injects them on mode-scoped selectors:
   specificity tie)
 
 Because both blocks are always present and scoped by mode, **Claude Desktop's own
-light/dark toggle (Settings -> Appearance) now works** and picks the variant that
-matches the current mode. This is the headline fix. Previously a single palette was
-forced regardless of mode (everything was injected with `!important` on `:root`),
-which broke light mode - switching to light still showed the dark palette. You no
-longer need to pin the app to dark mode for a theme to look right.
+light/dark toggle (Settings -> Appearance) picks the variant that matches the current
+mode**. A theme looks right in both, so there is no need to pin the app to one mode.
 
 The element overrides (sidebar, content panes, popovers, scrims, scrollbars, etc.)
 reference the semantic tokens, so they are emitted **once** and are automatically
@@ -51,7 +115,8 @@ merged in, with the `.jsonc` winning per key). The dual-variant shape:
       "light":  { /* full token set, LIGHT-mode values */ },
       "dark":   { /* full token set, DARK-mode values  */ },
       "chatFont": "optional CSS font-family string",   // optional, shared both modes
-      "spinner": { /* optional loading-glyph override, see below */ }
+      "spinner": { /* optional loading-glyph override, see below */ },
+      "category": "gaming"                            // optional; own picker section
     }
   }
 }
@@ -88,8 +153,10 @@ through to claude.ai's stock values for that mode):
 }
 ```
 
-- Set `activeTheme` to a built-in name (see below) or a key in your `themes` object.
-- Restart Claude Desktop to apply changes.
+- Set `activeTheme` to a built-in name, a community palette slug (both below), or a key
+  in your own `themes` object.
+- Restart Claude Desktop after hand-editing the file - it is read at startup. Switching
+  with the picker or Settings -> Extra -> Themes applies without a restart.
 
 > **Backward compatibility:** a **flat** theme object - one with `--token` keys
 > directly and **no** `light`/`dark` blocks (the old schema) - still works. The patch
@@ -98,9 +165,8 @@ through to claude.ai's stock values for that mode):
 
 ## Built-in themes (dual-variant)
 
-All built-ins now ship dual light + dark. Setting just `activeTheme` to one of these
-works with **no `themes` block needed** - the built-ins were regenerated to
-dual-variant and live inside the patch:
+Each built-in ships a light and a dark palette and lives inside the patch, so setting
+just `activeTheme` to one of these works with **no `themes` block needed**:
 
 | `activeTheme` | Light identity | Dark identity | Spinner |
 |---------------|----------------|---------------|---------|
@@ -120,19 +186,73 @@ Notes:
 - The three dark Catppuccin variants (`-mocha`, `-macchiato`, `-frappe`) all use
   **Latte** as their light variant - Catppuccin only defines one light flavour.
 - A built-in resolves entirely from the patch. If `activeTheme` matches nothing (not
-  a custom theme, not a built-in, not an alias) the patch logs a **loud** console
-  line listing the valid built-in names and applies nothing - it never silently
-  succeeds.
+  a custom theme, not a built-in, not a community palette, not an alias) the patch
+  logs a **loud** line listing the valid built-in names and how many themes each
+  source offers, then applies nothing - it never silently succeeds.
+- `mario` carries `"category": "gaming"`, so the picker and Settings -> Extra -> Themes
+  list it in the Gaming section below. It still resolves as a built-in.
+
+## Gaming themes
+
+Six more palettes ship as a **Gaming** category, authored in `js/gaming_themes.json` and
+merged into the built-ins at startup - same resolution rank, own divider-separated section
+in the picker and in Settings -> Extra -> Themes (where `mario` joins them, making seven
+cards). Each has a spinner built for it:
+
+| `activeTheme` | Light identity | Dark identity | Spinner |
+|---------------|----------------|---------------|---------|
+| `playstation` | PS1 console gray, PlayStation-blue accent | charcoal blue-black, bright blue accent | the four controller button symbols (`spin`) |
+| `gameboy` | DMG shell gray with magenta buttons | pea-green LCD, pea-green accent | d-pad (`pulse`) |
+| `final-fantasy` | parchment cream, menu-blue accent | classic menu blue, crystal-gold accent | faceted crystal (`pulse`) |
+| `zelda` | pale parchment green, forest-green accent | deep forest green, gold accent | walking hero silhouette (`flip`) |
+| `warcraft` | parchment gold, Alliance-blue accent | dark brown with gold, orc-green success | peon swinging a pick (`flip`) |
+| `dragonball` | white on a sky backdrop, orange accent | deep blue, bright orange accent | 4-star dragon ball (`spin`) |
+
+`playstation` also borrows its status colors from the controller's button symbols
+(circle-red danger, triangle-green success). `dragonball`'s spinner pins its orange and
+red, so the ball keeps its own colors in both variants; every other gaming spinner follows
+the theme accent.
+
+A theme of your own can join that section too: give it `"category": "gaming"` alongside
+its `light`/`dark` blocks.
+
+## Community palettes
+
+Alongside the built-ins, the patch bundles **84 community palettes** converted from
+the [noctalia community-palettes](https://github.com/noctalia-dev/community-palettes)
+collection - Rose Pine, Gruvbox, Solarized, Everforest, Tokyo Night, the Catppuccin
+accent variants, and many more. They need no `themes` block: set `activeTheme` to a
+slug, or just pick one in the picker.
+
+The slug is the palette's upstream name lowercased with every run of non-alphanumeric
+characters replaced by a single `-`, so `Rose Pine Moon` becomes `rose-pine-moon` and
+`Ayu Blue` becomes `ayu-blue`. Each palette carries a full dual-variant token set, so
+Claude's own light/dark toggle keeps working.
+
+Each one also carries a **spinner glyph drawn from its name or colors** - a stag for
+Everdeer, aurora ribbons for Nord Aurora, a great-wave curl for the Kanagawa family, a
+curled cat for every Catppuccin variant. There are 53 distinct designs across the 84
+slugs, because families share a shape on purpose. The glyphs are curated in
+`scripts/community-spinners.json` and merged into the palettes by
+`scripts/generate-community-themes.mjs`, so refreshing the collection stays one command.
+
+A visual catalog of every bundled palette - all 97, the 84 community ones plus the 7
+built-ins and the 6 gaming palettes, each with its swatch card and slug - is in
+[PALETTES.md](PALETTES.md).
+
+Resolution order is **your themes > built-ins > community palettes**, so defining a
+theme under `themes` with the same slug as a community palette overrides it rather
+than colliding with it.
 
 ## Spinner reshape (per-theme loading glyph)
 
-A theme can replace the Anthropic loading "star" with its own SVG shape via an
-optional `spinner` field. The patch injects a small renderer-side script that finds
-claude.ai's brand-star glyph (matched by its path signature) and swaps in your paths,
-keeping the `<svg>` wrapper so the accent color and box size are preserved. Animation
-keyframes ship alongside the theme CSS.
+Every bundled palette replaces the Anthropic loading "star" with its own SVG shape, and a
+theme of yours can too, via an optional `spinner` field. The patch injects a small
+renderer-side script that finds claude.ai's brand-star glyph (matched by its path
+signature) and swaps in your paths, keeping the `<svg>` wrapper so the accent color and
+box size are preserved. Animation keyframes ship alongside the theme CSS.
 
-The seven shapes that ship with the built-ins:
+The shapes on the built-ins:
 
 | Theme | Shape | Color | Animation |
 |-------|-------|-------|-----------|
@@ -144,26 +264,44 @@ The seven shapes that ship with the built-ins:
 | `catppuccin-frappe` | cat head | accent (`currentColor`) | `pulse` |
 | `catppuccin-latte` | coffee cup | accent (`currentColor`) | `pulse` |
 
+The gaming shapes are in the table [above](#gaming-themes); the community glyphs are
+listed in [baseline/SPINNER_SHAPES.md](../baseline/SPINNER_SHAPES.md).
+
 Shape format (in your theme object):
 
 ```jsonc
 "spinner": {
   "viewBox": "0 0 100 100",          // optional, default "0 0 100 100"
-  "match": "m19.6 66.5 19.7-11",     // optional override of the star path signature
-  "animation": "spin|bounce|pulse|null",
-  "paths": [ { "d": "...", "fill": "#hex" }, ... ]   // omit "fill" => currentColor (follows accent)
+  "match": "m19.6 66.5 19.7-11",     // optional override of the star signature (string or array)
+  "animation": "spin|bounce|pulse|flip|null",
+  "paths":  [ { "d": "...", "fill": "#hex" }, ... ],  // omit "fill" => currentColor (follows accent)
+  "paths2": [ { "d": "..." }, ... ]                   // second frame - required iff animation is "flip"
 }
 ```
 
-See [baseline/SPINNER_SHAPES.md](../baseline/SPINNER_SHAPES.md) for the full spec,
-the literal path data for each shape, and a DevTools-console recipe for swapping a
-shape live (no rebuild).
+- `spin` rotates about the glyph's own center, `bounce` is a vertical hop, `pulse` is an
+  opacity throb, and `null` inherits only claude.ai's own motion.
+- **`flip` is a two-frame sprite cycle:** both frames are rendered and hard-cut between at
+  ~2 frames/sec, no tweening - which is how the Zelda hero takes a step and the Warcraft
+  peon swings. It needs `paths2`; a `flip` without it is refused (and a `paths2` on any
+  other animation is ignored).
+- Keep both frames' shared silhouette at identical coordinates, or the cut reads as
+  jitter instead of motion.
+- A malformed spec is refused with a diagnostic line and the glyph on screen is left
+  alone - you never get a half-drawn shape. For the bundled palettes the same contract is
+  asserted at build time, so a broken spec fails the build.
+
+**Switching theme reshapes the glyph immediately** in every open window, and picking
+Claude default puts Claude's own star back. See
+[baseline/SPINNER_SHAPES.md](../baseline/SPINNER_SHAPES.md) for the full spec, the literal
+path data for each shape, and a DevTools-console recipe for swapping a shape live (no
+rebuild).
 
 > **The spinner is remote-rendered, so it is version-sensitive.** The star glyph
 > lives in claude.ai's bundle, which this repo cannot pin. If you see
-> `[spinner] matched 0` in the console, the upstream glyph geometry changed - set a
+> `[spinner] themed 0` in the console, the upstream glyph geometry changed - set a
 > per-theme `match` override to the new path signature (no rebuild needed). A
-> `matched 0` is **not** "feature removed", it is "geometry drifted".
+> `themed 0` is **not** "feature removed", it is "geometry drifted".
 
 ## Token reference (v1.15962)
 

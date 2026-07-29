@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Themes</title>
+<style>
+/*
+ * Theme picker chrome. Deliberately achromatic: 84+ palettes are on screen at
+ * once, so the only color the window carries is --accent, which is taken from
+ * the palette you have selected. Everything else is neutral so the swatches
+ * are the loudest thing on the page.
+ */
+:root{
+  --ink-900:#0e0e11;
+  --ink-800:#15151a;
+  --ink-700:#1c1c23;
+  --ink-600:#24242c;
+  --line:#2c2c35;
+  --fog-500:#75757f;
+  --fog-400:#9a9aa5;
+  --fog-100:#e9e9ef;
+  --accent:#d97757;
+  --sans:"Inter","Cantarell","Ubuntu","DejaVu Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Fira Code","DejaVu Sans Mono","Liberation Mono",ui-monospace,monospace;
+  --pad:22px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--ink-900);
+  color:var(--fog-100);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+#app{display:flex;flex-direction:column;height:100%}
+
+/* ---- header ---------------------------------------------------------- */
+header{
+  flex:0 0 auto;
+  display:flex;
+  align-items:baseline;
+  gap:16px;
+  flex-wrap:wrap;
+  padding:20px var(--pad) 16px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(var(--ink-800),var(--ink-900));
+}
+h1{
+  margin:0;
+  font-size:19px;
+  font-weight:620;
+  letter-spacing:-0.01em;
+}
+.tally{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--fog-500);
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+.search{
+  margin-left:auto;
+  position:relative;
+  flex:1 1 220px;
+  max-width:320px;
+  min-width:160px;
+}
+.search input{
+  width:100%;
+  padding:8px 12px 8px 30px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--ink-700);
+  color:var(--fog-100);
+  font-family:var(--mono);
+  font-size:12px;
+}
+.search input::placeholder{color:var(--fog-500)}
+.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--fog-500);fill:none;stroke-width:2}
+
+/* ---- scroll body ----------------------------------------------------- */
+main{flex:1 1 auto;overflow-y:auto;padding:6px var(--pad) 26px;scrollbar-width:thin;scrollbar-color:var(--ink-600) transparent}
+section{margin-top:22px}
+section[hidden]{display:none}
+/* Gaming palettes are their own thing: a full-width rule sets them apart from the
+   palettes above instead of relying on the eyebrow's trailing hairline alone. */
+.section-split{margin-top:30px;padding-top:26px;border-top:1px solid var(--line)}
+.eyebrow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0 0 12px;
+  font-family:var(--mono);
+  font-size:10.5px;
+  font-weight:500;
+  letter-spacing:0.13em;
+  text-transform:uppercase;
+  color:var(--fog-400);
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+.badge{
+  padding:1px 7px;
+  border-radius:20px;
+  background:var(--ink-700);
+  color:var(--fog-400);
+  font-size:10px;
+  letter-spacing:0.06em;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(236px,1fr));
+  gap:12px;
+}
+
+/* ---- palette card ---------------------------------------------------- */
+.card{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  width:100%;
+  padding:13px 13px 12px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--ink-800);
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+  transition:border-color .14s ease,transform .14s ease,background-color .14s ease;
+}
+.card[hidden]{display:none}
+.card:hover{background:var(--ink-700);border-color:#3a3a46;transform:translateY(-1px)}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card[aria-pressed="true"]{
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent),0 6px 22px -12px var(--accent);
+}
+.card-head{display:flex;align-items:center;gap:8px}
+.card-title{
+  flex:1;
+  min-width:0;
+  font-size:14.5px;
+  font-weight:600;
+  letter-spacing:-0.005em;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.card-check{
+  flex:0 0 auto;
+  width:17px;height:17px;
+  border-radius:50%;
+  background:var(--accent);
+  color:var(--ink-900);
+  font-size:11px;
+  font-weight:700;
+  line-height:17px;
+  text-align:center;
+  opacity:0;
+  transform:scale(.6);
+  transition:opacity .16s ease,transform .16s ease;
+}
+.card[aria-pressed="true"] .card-check{opacity:1;transform:scale(1)}
+.card-slug{
+  font-family:var(--mono);
+  font-size:10.5px;
+  color:var(--fog-500);
+  letter-spacing:0.02em;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.strips{display:flex;flex-direction:column;gap:5px}
+.strip{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:5px 8px;
+  border-radius:7px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.22),0 0 0 1px rgba(255,255,255,.05);
+}
+.strip-k{
+  flex:0 0 auto;
+  width:12px;
+  margin-right:1px;
+  font-family:var(--mono);
+  font-size:9px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  opacity:.62;
+}
+.dot{flex:0 0 auto;width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.28)}
+.strip--stock{background:repeating-linear-gradient(115deg,var(--ink-700) 0 5px,var(--ink-600) 5px 10px);color:var(--fog-400)}
+.strip--stock .strip-k{opacity:1}
+.stock-note{font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;color:var(--fog-500)}
+
+/* ---- states ---------------------------------------------------------- */
+.notice{
+  margin:20px 0 0;
+  padding:14px 16px;
+  border:1px solid var(--line);
+  border-left:2px solid var(--accent);
+  border-radius:8px;
+  background:var(--ink-800);
+  color:var(--fog-400);
+  font-size:13px;
+}
+.notice strong{display:block;margin-bottom:4px;color:var(--fog-100);font-weight:600}
+.notice code{font-family:var(--mono);font-size:12px;color:var(--fog-100)}
+#empty[hidden],#error[hidden]{display:none}
+
+/* ---- footer + toast -------------------------------------------------- */
+footer{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 14px;
+  padding:11px var(--pad);
+  border-top:1px solid var(--line);
+  background:var(--ink-800);
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:0.03em;
+  color:var(--fog-500);
+}
+footer > span{white-space:nowrap}
+kbd{
+  padding:1px 5px;
+  border:1px solid var(--line);
+  border-bottom-width:2px;
+  border-radius:4px;
+  background:var(--ink-700);
+  color:var(--fog-400);
+  font:inherit;
+}
+/* Floated clear of the footer flow: a long theme name must never reflow the
+   keyboard hints out from under the reader. */
+#toast{
+  position:fixed;
+  right:var(--pad);
+  bottom:52px;
+  max-width:calc(100% - 2 * var(--pad));
+  padding:7px 13px;
+  border-radius:20px;
+  background:var(--accent);
+  color:var(--ink-900);
+  font-family:var(--mono);
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:0.01em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  box-shadow:0 10px 30px -10px rgba(0,0,0,.85);
+  pointer-events:none;
+  opacity:0;
+  transform:translateY(6px);
+  transition:opacity .18s ease,transform .18s ease;
+}
+#toast.show{opacity:1;transform:none}
+#toast.bad{background:#e0534f;color:#fff}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important}
+  .card:hover{transform:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Themes</h1>
+    <span class="tally" id="tally">loading</span>
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+      <input id="search" type="search" placeholder="Filter by name or slug" autocomplete="off" spellcheck="false" aria-label="Filter themes">
+    </label>
+  </header>
+
+  <main id="main">
+    <p class="notice" id="error" hidden></p>
+    <p class="notice" id="empty" hidden></p>
+    <section id="sec-stock" hidden>
+      <h2 class="eyebrow">Stock</h2>
+      <div class="grid" id="grid-stock"></div>
+    </section>
+    <section id="sec-custom" hidden>
+      <h2 class="eyebrow">Your themes <span class="badge" id="count-custom">0</span></h2>
+      <div class="grid" id="grid-custom"></div>
+    </section>
+    <section id="sec-gaming" class="section-split" hidden>
+      <h2 class="eyebrow">Gaming <span class="badge" id="count-gaming">0</span></h2>
+      <div class="grid" id="grid-gaming"></div>
+    </section>
+    <section id="sec-builtin" hidden>
+      <h2 class="eyebrow">Built-in <span class="badge" id="count-builtin">0</span></h2>
+      <div class="grid" id="grid-builtin"></div>
+    </section>
+    <section id="sec-community" hidden>
+      <h2 class="eyebrow">Community <span class="badge" id="count-community">0</span></h2>
+      <div class="grid" id="grid-community"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> toggles this window</span>
+    <span><kbd>/</kbd> filter &middot; <kbd>Enter</kbd> apply &middot; <kbd>Esc</kbd> close</span>
+    <span>spinner shape switches with the theme</span>
+    <span id="toast" role="status" aria-live="polite"></span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var SWATCH = ["--bg-000", "--text-000", "--accent-brand", "--accent-pro-100", "--danger-100", "--warning-100", "--success-100"];
+  var SECTIONS = ["custom", "gaming", "builtin", "community"];
+  var LABEL = { custom: "Your themes", gaming: "Gaming", builtin: "Built-in", community: "Community" };
+  var state = { entries: [], active: null, cards: [] };
+  var toastTimer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  }
+
+  // Theme tokens are authored as "H S% L%" (CSS Color 4 shorthand); --claude-*
+  // tokens are plain hex. Normalize both to something a style attribute accepts.
+  function pct(x) {
+    x = String(x).trim();
+    return /%$/.test(x) ? x : parseFloat(x) + "%";
+  }
+  function color(v, fallback) {
+    if (typeof v !== "string") return fallback;
+    v = v.trim();
+    if (!v) return fallback;
+    if (v.charAt(0) === "#" || /^(rgb|hsl|oklch|color)a?\(/i.test(v)) return v;
+    var p = v.split(/[\s,]+/);
+    if (p.length < 3) return fallback;
+    var h = parseFloat(p[0]);
+    if (isNaN(h)) return fallback;
+    return "hsl(" + h + "," + pct(p[1]) + "," + pct(p[2]) + ")";
+  }
+
+  function strip(vars, key) {
+    var row = el("span", "strip");
+    row.style.background = color(vars && vars["--bg-100"], "#1c1c23");
+    var k = el("span", "strip-k", key);
+    k.style.color = color(vars && vars["--text-000"], "#9a9aa5");
+    row.appendChild(k);
+    for (var i = 0; i < SWATCH.length; i++) {
+      var dot = el("span", "dot");
+      dot.style.background = color(vars && vars[SWATCH[i]], "#3a3a46");
+      row.appendChild(dot);
+    }
+    return row;
+  }
+
+  function card(entry) {
+    var b = el("button", "card");
+    b.type = "button";
+    b.setAttribute("aria-pressed", "false");
+    b.dataset.name = entry.name;
+    b.dataset.hay = (entry.displayName + " " + entry.name + " " + entry.source +
+                     " " + (entry.category || "")).toLowerCase();
+
+    var head = el("span", "card-head");
+    head.appendChild(el("span", "card-title", entry.displayName));
+    head.appendChild(el("span", "card-check", "✓"));
+    b.appendChild(head);
+    b.appendChild(el("span", "card-slug", entry.name || "stock"));
+
+    var strips = el("span", "strips");
+    if (entry.source === "stock") {
+      var rows = [["D", "Claude's own dark"], ["L", "Claude's own light"]];
+      for (var r = 0; r < rows.length; r++) {
+        var s = el("span", "strip strip--stock");
+        s.appendChild(el("span", "strip-k", rows[r][0]));
+        s.appendChild(el("span", "stock-note", rows[r][1]));
+        strips.appendChild(s);
+      }
+    } else {
+      strips.appendChild(strip(entry.dark, "D"));
+      strips.appendChild(strip(entry.light, "L"));
+    }
+    b.appendChild(strips);
+
+    b.addEventListener("click", function () { pick(entry.name); });
+    return b;
+  }
+
+  function accentOf(name) {
+    for (var i = 0; i < state.entries.length; i++) {
+      var e = state.entries[i];
+      if (e.name === name) {
+        return color((e.dark && e.dark["--accent-brand"]) || (e.light && e.light["--accent-brand"]), null);
+      }
+    }
+    return null;
+  }
+
+  function paintAccent() {
+    var a = state.active ? accentOf(state.active) : null;
+    document.documentElement.style.setProperty("--accent", a || "#d97757");
+  }
+
+  function markActive() {
+    for (var i = 0; i < state.cards.length; i++) {
+      var c = state.cards[i];
+      var on = (c.dataset.name || "") === (state.active || "");
+      c.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
+  function toast(msg, bad) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.className = "show" + (bad ? " bad" : "");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ""; }, 3600);
+  }
+
+  function fail(title, detail) {
+    var box = $("error");
+    box.hidden = false;
+    box.textContent = "";
+    box.appendChild(el("strong", null, title));
+    box.appendChild(document.createTextNode(detail || ""));
+    $("tally").textContent = "unavailable";
+  }
+
+  function pick(name) {
+    if (!window.cdbThemes) return;
+    window.cdbThemes.apply(name).then(function (r) {
+      if (!r || !r.ok) {
+        toast((r && r.error) || "Could not apply that theme", true);
+        return;
+      }
+      state.active = name || null;
+      markActive();
+      paintAccent();
+      var where = (r && r.saved) || "claude-desktop-bin.jsonc";
+      var shown = name || "stock";
+      for (var i = 0; i < state.entries.length; i++) {
+        if (state.entries[i].name === name) { shown = state.entries[i].displayName; break; }
+      }
+      toast(name ? "Applied " + shown + " - saved to " + where
+                 : "Restored Claude's palette - saved to " + where);
+    }, function (e) {
+      toast("Could not reach the theme engine: " + (e && e.message), true);
+    });
+  }
+
+  function filter(q) {
+    q = q.trim().toLowerCase();
+    var shown = 0;
+    var perSection = { custom: 0, gaming: 0, builtin: 0, community: 0, stock: 0 };
+    for (var i = 0; i < state.cards.length; i++) {
+      var c = state.cards[i];
+      var hit = !q || c.dataset.hay.indexOf(q) >= 0;
+      c.hidden = !hit;
+      if (hit) { shown++; perSection[c.dataset.source]++; }
+    }
+    for (var s = 0; s < SECTIONS.length; s++) {
+      var key = SECTIONS[s];
+      var sec = $("sec-" + key);
+      if (!sec) continue;
+      sec.hidden = perSection[key] === 0;
+      var badge = $("count-" + key);
+      if (badge) badge.textContent = String(perSection[key]);
+    }
+    var stock = $("sec-stock");
+    if (stock) stock.hidden = perSection.stock === 0;
+    var empty = $("empty");
+    if (shown === 0) {
+      empty.hidden = false;
+      empty.textContent = "";
+      empty.appendChild(el("strong", null, "Nothing matches “" + q + "”"));
+      empty.appendChild(document.createTextNode("Search a family (catppuccin, gruvbox, rose-pine), a color, or a slug."));
+    } else {
+      empty.hidden = true;
+    }
+  }
+
+  // 2D movement across the visible cards: left/right walk the flow, up/down jump
+  // to the nearest card on the neighbouring row.
+  function visible() {
+    return state.cards.filter(function (c) { return !c.hidden && c.offsetParent !== null; });
+  }
+  function move(from, dir) {
+    var vis = visible();
+    var i = vis.indexOf(from);
+    if (i < 0) return null;
+    if (dir === "next") return vis[Math.min(i + 1, vis.length - 1)];
+    if (dir === "prev") return vis[Math.max(i - 1, 0)];
+    var top = from.offsetTop;
+    var left = from.offsetLeft;
+    var best = null;
+    var bestDx = Infinity;
+    for (var n = 0; n < vis.length; n++) {
+      var c = vis[n];
+      var below = c.offsetTop > top + 4;
+      var above = c.offsetTop < top - 4;
+      if (dir === "down" ? !below : !above) continue;
+      if (best) {
+        if (dir === "down" ? c.offsetTop > best.offsetTop : c.offsetTop < best.offsetTop) continue;
+      }
+      var dx = Math.abs(c.offsetLeft - left);
+      if (!best || c.offsetTop !== best.offsetTop || dx < bestDx) {
+        best = c;
+        bestDx = dx;
+      }
+    }
+    return best;
+  }
+
+  document.addEventListener("keydown", function (ev) {
+    var k = ev.key;
+    if (k === "Escape" || (ev.ctrlKey && ev.shiftKey && k && k.toLowerCase() === "t")) {
+      ev.preventDefault();
+      if (window.cdbThemes && window.cdbThemes.close) window.cdbThemes.close();
+      return;
+    }
+    var search = $("search");
+    if (k === "/" && document.activeElement !== search) {
+      ev.preventDefault();
+      search.focus();
+      search.select();
+      return;
+    }
+    if (document.activeElement === search) {
+      if (k === "ArrowDown") {
+        var first = visible()[0];
+        if (first) { ev.preventDefault(); first.focus(); }
+      }
+      return;
+    }
+    var cur = document.activeElement;
+    if (!cur || !cur.classList || !cur.classList.contains("card")) return;
+    var dir = k === "ArrowRight" ? "next" : k === "ArrowLeft" ? "prev"
+            : k === "ArrowDown" ? "down" : k === "ArrowUp" ? "up" : null;
+    if (!dir) return;
+    var target = move(cur, dir);
+    if (target) {
+      ev.preventDefault();
+      target.focus();
+      target.scrollIntoView({ block: "nearest" });
+    }
+  });
+
+  $("search").addEventListener("input", function (ev) { filter(ev.target.value); });
+
+  // A theme's SOURCE is its resolution tier (custom > builtin > community); its
+  // CATEGORY is how it is grouped on screen. Gaming palettes ship as built-ins but
+  // get their own separated section - and a gaming-category theme from any source
+  // (a community palette, or one of your own) lands there too.
+  function bucketOf(entry) {
+    if (entry.source === "stock") return "stock";
+    if (entry.category === "gaming") return "gaming";
+    return entry.source;
+  }
+
+  function render() {
+    var buckets = { stock: [], custom: [], gaming: [], builtin: [], community: [] };
+    for (var i = 0; i < state.entries.length; i++) {
+      var e = state.entries[i];
+      var b = bucketOf(e);
+      if (buckets[b]) buckets[b].push(e);
+    }
+    var keys = ["stock"].concat(SECTIONS);
+    for (var s = 0; s < keys.length; s++) {
+      var key = keys[s];
+      var grid = $("grid-" + key);
+      var sec = $("sec-" + key);
+      if (!grid || !sec) continue;
+      var list = buckets[key];
+      sec.hidden = list.length === 0;
+      var badge = $("count-" + key);
+      if (badge) badge.textContent = String(list.length);
+      for (var n = 0; n < list.length; n++) {
+        var c = card(list[n]);
+        c.dataset.source = key;
+        grid.appendChild(c);
+        state.cards.push(c);
+      }
+    }
+    var n2 = state.entries.length - 1;
+    $("tally").textContent = n2 + " palettes";
+    markActive();
+    paintAccent();
+  }
+
+  function boot() {
+    if (!window.cdbThemes) {
+      fail("The theme bridge did not load",
+           "Nothing was exposed on this page, so it cannot read or change themes. Restart Claude Desktop, and if it happens again check ~/.config/Claude/logs/claude-patches.log.");
+      return;
+    }
+    Promise.all([window.cdbThemes.list(), window.cdbThemes.active()]).then(function (res) {
+      var l = res[0];
+      var a = res[1];
+      if (!l || !l.ok) {
+        fail("The theme engine is not available",
+             (l && l.error) || "The custom-themes patch did not install its registry in this build.");
+        return;
+      }
+      state.entries = [{ name: "", displayName: "Claude default", source: "stock" }].concat(l.entries || []);
+      state.active = (a && a.ok) ? (a.name || null) : null;
+      render();
+      var first = state.cards.filter(function (c) { return c.getAttribute("aria-pressed") === "true"; })[0];
+      (first || $("search")).focus();
+    }, function (e) {
+      fail("Could not reach the theme engine", (e && e.message) || "");
+    });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

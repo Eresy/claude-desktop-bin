@@ -179,6 +179,69 @@ for patch_file in "$PATCHES_DIR"/*.nim "$PATCHES_DIR"/*.js; do
     echo ""
 done
 
+# The "Extra" settings area is injected into the REMOTE claude.ai Settings modal,
+# so applying cleanly says nothing about it rendering correctly. The DOM suite
+# runs its page half against fixtures in headless Chromium. Skipped rather than
+# failed where no browser is installed - it needs no npm package, only a chrome.
+echo "-----------------------------------"
+echo "Extra settings DOM suite (headless Chromium)"
+if command -v node >/dev/null 2>&1 && {
+        command -v chromium >/dev/null 2>&1 ||
+        command -v chromium-browser >/dev/null 2>&1 ||
+        command -v google-chrome-stable >/dev/null 2>&1 ||
+        command -v google-chrome >/dev/null 2>&1; }; then
+    TOTAL=$((TOTAL + 1))
+    if node "$(dirname "$0")/test-extra-settings-dom.mjs" 2>&1 | sed 's/^/  /'; then
+        echo "  Status: PASS"
+        PASSED=$((PASSED + 1))
+    else
+        echo "  Status: FAIL"
+        FAILED=$((FAILED + 1))
+    fi
+else
+    echo "  Status: SKIP (no node and/or chromium on this machine)"
+    SKIPPED=$((SKIPPED + 1))
+fi
+echo ""
+
+# A clean patch run says nothing about the theme engine's LIVE behaviour: whether a theme
+# switch re-themes the spinner in every open window (it used to need a restart), whether
+# a revert restores Claude's own glyph, or whether the picker groups gaming palettes by
+# category, or whether the theme survives the scope upstream re-defines --bg-100 in.
+# These suites run the REAL injected engine (electron shimmed) and the real picker page /
+# injector / stylesheet in headless Chromium. Each one exits 3 to say "a tool I need is
+# not installed" - that is a SKIP, not a FAIL.
+echo "-----------------------------------"
+echo "Theme engine suites (node + headless Chromium)"
+if command -v node >/dev/null 2>&1; then
+    for suite in test-spinner-main.mjs test-spinner-dom.mjs test-picker-gaming.mjs test-theme-scope.mjs; do
+        TOTAL=$((TOTAL + 1))
+        echo "  [$suite]"
+        suite_out=$(node "$SCRIPT_DIR/$suite" 2>&1) && suite_rc=0 || suite_rc=$?
+        echo "$suite_out" | sed 's/^/    /'
+        case $suite_rc in
+            0)
+                echo "    Status: PASS"
+                PASSED=$((PASSED + 1))
+                ;;
+            3)
+                echo "    Status: SKIP (the suite reported a missing tool)"
+                SKIPPED=$((SKIPPED + 1))
+                ;;
+            *)
+                echo "    Status: FAIL"
+                FAILED=$((FAILED + 1))
+                ;;
+        esac
+        echo ""
+    done
+else
+    echo "  Status: SKIP (no node on this machine)"
+    TOTAL=$((TOTAL + 4))
+    SKIPPED=$((SKIPPED + 4))
+    echo ""
+fi
+
 echo "==================================="
 echo "  Summary"
 echo "==================================="

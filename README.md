@@ -16,7 +16,7 @@
 Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
 
 - [**Computer Use**](#computer-use) - desktop automation (screenshot, click, type, scroll, teach mode).
-- [**Custom Themes**](#custom-themes) - 7 built-in dual light/dark themes with custom loading spinners, or roll your own.
+- [**Custom Themes**](#custom-themes) - 97 bundled dual light/dark palettes (7 built-in, 6 gaming, 84 community), each with its own loading spinner, switchable live from a Ctrl+Shift+T picker, or roll your own.
 - [**Multiple Profiles**](#multiple-profiles) - run several instances side by side, each logged in to a different account with fully isolated state.
 - [**Quick Entry**](#quick-entry) - global hotkey popup (Ctrl+Alt+Space), multi-monitor and Wayland-aware.
 - [**Hardware Buddy**](#patches) - enables the Nibblet BLE pet device on Linux: forces the feature flag so the BLE transport arms, and turns on Chromium Web Bluetooth (via BlueZ) so the in-app scan can find the device - both are off by default upstream on Linux.
@@ -266,11 +266,26 @@ curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc | gpg --
 
 **KDE Plasma needs 6.6+** for the native KWin route (earlier Plasma lacks the KWin capture-hiding API) - below that, Computer Use falls back to `ydotool`/`spectacle`; updating Plasma restores the full experience. `claude-desktop --diagnose` prints your KWin version and which route is active.
 
+## The "Extra" Settings
+
+This package adds its own section to Claude's Settings dialog: **Extra** - the home of everything this project layers on top of the official build, and where new features land first.
+
+![The Extra section in Claude's Settings: Themes with the Gaming palettes, next to Features](docs/global/2026-07-29_20-21-extra.png)
+
+Two panels today:
+
+- **Extra → Themes** - all **97 bundled palettes** with live color dots; one click applies instantly in every open window. Make Claude Desktop blend into your Linux desktop: palettes matching stock DE looks (ADW/Adwaita, Breeze) sit next to the classics (Catppuccin, Nord, Gruvbox, Rose Pine, Everforest) and a [Gaming collection](#custom-themes).
+- **Extra → Features** - the catalogued upstream [feature flags](#feature-flag-overrides-advanced) as switches, no config-file editing needed.
+
+Expect this section to grow - Extra is where the project is heading.
+
 ## Custom Themes
 
 Recolor the whole app - chat, sidebar, Code/Cowork, dialogs, Quick Entry - by overriding CSS variables, injected into every window via Electron's `insertCSS()`. Each theme is **dual light/dark**: it ships a `light` and a `dark` palette, and the app's own toggle (Settings → Appearance) picks the matching one live. Every built-in is contrast-checked (WCAG AA).
 
-**Quick start** - just pick a theme, no extra config needed:
+**Quick start** - press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> anywhere in the app. A searchable picker opens with every theme available to you, each card showing a dark and a light row of swatches; click one and it applies immediately in every open window, no restart and no config file. Your choice is saved to `claude-desktop-bin.jsonc` with any comments in it left intact. The same list is also in the app's Settings dialog under **Extra → Themes**, next to an **Extra → Features** panel that exposes the [feature flags](#feature-flag-overrides-advanced) as switches.
+
+Prefer the config file? One line is enough, no `themes` block needed:
 ```bash
 echo '{"activeTheme": "mario"}' > ~/.config/Claude/claude-desktop-bin.jsonc
 # Restart Claude Desktop, then toggle Settings → Appearance for light/dark
@@ -293,6 +308,10 @@ The Mario theme ships a **light "overworld"** and a **dark "underground"** varia
 | `catppuccin-macchiato` | Latte | Macchiato | cat |
 | `catppuccin-frappe` | Latte | Frappe | cat |
 | `catppuccin-latte` | Latte | Mocha | coffee cup |
+
+**6 gaming palettes** form their own **Gaming** section in the picker and in Settings → Extra → Themes, with Mario joining them: `playstation` (PS1 console gray / charcoal, button-symbol status colors, spinning button glyphs), `gameboy` (DMG shell / pea-green LCD, d-pad), `final-fantasy` (parchment / menu blue, crystal), `zelda` (forest green and gold, a two-frame walking hero), `warcraft` (parchment gold / dark brown, a two-frame peon at work) and `dragonball` (sky and white / deep blue, a spinning 4-star ball). They resolve at built-in rank, so `"activeTheme": "zelda"` is enough.
+
+**84 community palettes** ship alongside them, converted from the [Noctalia community-palettes](https://github.com/noctalia-dev/community-palettes) collection - Rose Pine, Gruvbox, Everforest, Kanagawa, Solarized, Tokyo Night, the Catppuccin accent variants and more. Each is a full dual light/dark set, so `"activeTheme": "<slug>"` is all it takes, and each carries a spinner glyph drawn from its name or colors. Browse all 97 with their swatches in **[themes/PALETTES.md](themes/PALETTES.md)**.
 
 Each theme can also inject raw `customCss` and replace the loading glyph with a custom SVG. See **[themes/README.md](themes/README.md)** for the schema, CSS-variable reference, contrast tips, and how to author your own.
 
@@ -412,7 +431,7 @@ No symlinks or manual path configuration are needed: the capability probe search
 
 **CoworkSpaces** are stored locally per account under `~/.config/Claude/local-agent-mode-sessions/` (see [Known Limitations](#known-limitations)).
 
-> **Note — Cowork does not work inside a nested VM.** Because Cowork boots its own lightweight VM (the bundled backend downloads/builds a rootfs and starts it via QEMU/KVM), it needs real, stable access to `/dev/kvm`. Running Claude Desktop inside a hypervisor guest (VirtualBox, VMware, etc.) means Cowork would have to launch a VM *inside* a VM (nested virtualization), which most desktop hypervisors do not support reliably — VirtualBox in particular can hard-crash the entire guest when the nested VM starts. The app itself installs and runs fine in a VM; only the Cowork feature requires a bare-metal host (or a cloud instance with nested virtualization properly enabled).
+> **Note - Cowork does not work inside a nested VM.** Because Cowork boots its own lightweight VM (the bundled backend downloads/builds a rootfs and starts it via QEMU/KVM), it needs real, stable access to `/dev/kvm`. Running Claude Desktop inside a hypervisor guest (VirtualBox, VMware, etc.) means Cowork would have to launch a VM *inside* a VM (nested virtualization), which most desktop hypervisors do not support reliably - VirtualBox in particular can hard-crash the entire guest when the nested VM starts. The app itself installs and runs fine in a VM; only the Cowork feature requires a bare-metal host (or a cloud instance with nested virtualization properly enabled).
 
 ## Third-Party / Enterprise Inference
 
@@ -441,8 +460,11 @@ Features the official build doesn't have - either they exist nowhere upstream (t
 
 | Patch | What it does & why it exists |
 |-------|------------------------------|
-| `add_feature_custom_themes.nim` | CSS theme injection - 7 dual light/dark themes + per-theme loading spinner, applied to every window via `insertCSS()`. Upstream has no theming layer beyond the light/dark toggle |
-| `add_growthbook_overrides.nim` | [Local feature-flag overrides](#feature-flag-overrides-advanced) via `claude-desktop-bin.jsonc` - hooks the GrowthBook features-store setter so user overrides win over the server rollout. Upstream has no local override mechanism (the flag cache is encrypted). Also applies our built-in Linux force for Hardware Buddy (Nibblet BLE, flag `2358734848`) at the store level so its `onFeatureChange` listener arms the BLE transport; a user override still wins. The in-app scan additionally needs Chromium Web Bluetooth, which the launcher enables via `--enable-blink-features=WebBluetooth` (off by default on Linux), plus the `bluez` daemon running |
+| `add_feature_custom_themes.nim` | CSS theme injection - 97 bundled dual light/dark palettes (7 curated built-ins, 6 gaming, 84 community), each with its own loading spinner, applied to every window via `insertCSS()`. Upstream has no theming layer beyond the light/dark toggle. Also installs the theme registry (`globalThis.__cdbThemes`) the picker below drives and the live spinner engine, so a switch re-themes colors *and* the loading glyph in every open window instead of on the next start |
+| `add_feature_theme_picker.nim` | The <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> [theme picker](themes/README.md#theme-picker-ctrlshiftt) - a searchable gallery of every user, gaming, built-in and community theme, grouped in divider-separated sections, with light/dark swatches per palette. Clicking one applies it live and saves it to `claude-desktop-bin.jsonc`, comments intact. Opens via `before-input-event`, so it needs nothing from the app's own bundle |
+| `add_feature_extra_settings.nim` | The rainbow **Extra** group in the app's own Settings dialog, with a **Themes** panel (every user, gaming, built-in and community palette as a swatch row, in the same sections as the picker - one click applies and saves it live) and a **Features** panel (all 134 catalogued GrowthBook flags as switches, pre-set to what your account actually gets, with value-carrying flags read-only and the Cowork-breaking flag locked). Main-process half: the `cdb-extra:*` / `cdb-flags:*` IPC handlers, the only writer of `growthbookOverrides` in `claude-desktop-bin.json`, and the `insertCSS` + `executeJavaScript` injection of the panel UI. The Settings dialog is remote claude.ai markup, so the injector anchors on semantics only (`role="dialog"` plus the visible text of known nav items) and fails soft - if it cannot find the dialog it logs one line and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> remains the way in |
+| `add_feature_extra_settings_bridge.nim` | The `window.cdbExtra` contextBridge in the `mainView` preload that the Extra panels talk through. One fixed method per channel and no generic `invoke()` passthrough, because the page behind this preload is remote code; the main side re-validates every sender and argument |
+| `add_growthbook_overrides.nim` | [Local feature-flag overrides](#feature-flag-overrides-advanced) via `claude-desktop-bin.jsonc` - hooks the GrowthBook features-store setter so user overrides win over the server rollout. Upstream has no local override mechanism (the flag cache is encrypted). Also applies our built-in Linux force for Hardware Buddy (Nibblet BLE, flag `2358734848`) at the store level so its `onFeatureChange` listener arms the BLE transport; a user override still wins. The in-app scan additionally needs Chromium Web Bluetooth, which the launcher enables via `--enable-blink-features=WebBluetooth` (off by default on Linux), plus the `bluez` daemon running. The commented flag list in that template doubles as the catalog the Extra settings **Features** panel renders, and the file's parser accepts a trailing comma so uncommenting a single line is enough |
 | `fix_computer_use_linux.nim` | Enables Computer Use. Upstream gates it to macOS/Windows (platform set, executor factories, enable gate) and ships zero Linux input/screenshot backends. Removes the gates and injects a Linux executor backed by the four bundled first-party bridges (x11-bridge on X11/XWayland, wlroots-bridge on Sway/Hyprland/Niri, gnome-portal-bridge on GNOME Wayland, kwin-portal-bridge on KDE Wayland; ydotool only on exotic compositors) |
 | `fix_computer_use_tcc.nim` | Stubs the macOS TCC permission IPC (accessibility / screen recording) with `not_applicable` answers - TCC has no Linux equivalent, and without handlers the renderer's permission checks throw "No handler registered" |
 | `fix_quick_entry_position.nim` | [Quick Entry](#quick-entry) opens on the cursor's monitor instead of the primary display and auto-focuses the input; position/focus retries run only on X11 (Wayland doesn't reposition after `show()`) |
@@ -533,9 +555,11 @@ Claude Desktop gates many features behind server-side GrowthBook flags with no b
 }
 ```
 
-Overrides apply on every flag load (startup + periodic refresh, no restart needed) and win over the server rollout; active overrides are logged to `logs/claude-patches.log`. `true`/`false` for switches, numbers/strings/objects for value flags.
+The file is re-read on every flag load (startup and each periodic refresh) and overrides win over the server rollout; active overrides are logged to `logs/claude-patches.log`. `true`/`false` for switches, numbers/strings/objects for value flags. Most gated features are wired up while the app starts, so restart after changing a flag.
 
 **Full flag catalog:** the auto-created template lists *every* GrowthBook flag the app reads from its feature store, each commented out with a short description - browse it here: **[docs/claude-desktop-bin.jsonc](docs/claude-desktop-bin.jsonc)**. It reflects the version noted in the file header; CI verifies it stays in sync with the shipped template.
+
+**Or flip them in the app:** Settings → **Extra** → **Features** renders the same catalog - all 134 flags - as switches, pre-set to what your account actually gets, and writes your changes to `growthbookOverrides` in `claude-desktop-bin.json` (it offers a Restart now button, for the reason above). Value-carrying flags are shown read-only, and a flag you set by hand in the `.jsonc` stays owned by that file - hand edits win per flag ID and the panel will not overwrite them.
 
 **Scope and caveats:** flag IDs are Anthropic-internal and can vanish or change meaning in any release; this is unsupported expert territory - if the app misbehaves, empty the file first. The Computer Use patch forces its own enable gate directly and doesn't consult this file, and server-side account capabilities can't be overridden locally at all. Hardware Buddy (`2358734848`) is force-enabled on Linux through this same store-override mechanism, so a `"2358734848": false` entry here opts back out.
 

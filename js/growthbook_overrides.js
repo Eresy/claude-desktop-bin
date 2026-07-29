@@ -6,6 +6,13 @@
   var lastParsed = null;
   var announced = "";
 
+  // Last feature map the store setter handed us (pre-override) and the map we
+  // handed back (post-override). Read through globalThis.__cdbGbFlags by the
+  // Extra settings page so its switches can show what the app actually sees.
+  var lastServer = null;
+  var lastEffective = null;
+  var catalogCache = null;
+
   function diag(msg) {
     try { (globalThis.__cdbDiag || console.log)(msg); } catch (e) {}
   }
@@ -24,6 +31,11 @@
 
   // JSONC: strip // and /* */ comments outside of strings so the shipped
   // template can list flags commented out and users just uncomment them.
+  //
+  // Trailing commas are dropped too, and that is load-bearing rather than
+  // cosmetic: the template tells the user to uncomment ONE line, and every line
+  // ends with a comma, so the result would otherwise be {"123": true,} - invalid
+  // JSON, and the whole config would be silently ignored.
   function stripJsonComments(s) {
     var out = "";
     var inStr = false;
@@ -40,6 +52,17 @@
       if (c === '"') { inStr = true; out += c; i++; continue; }
       if (c === "/" && s[i + 1] === "/") { while (i < s.length && s[i] !== "\n") i++; continue; }
       if (c === "/" && s[i + 1] === "*") { i += 2; while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++; i += 2; continue; }
+      if (c === ",") {
+        // Look past whitespace and comments for a closing brace/bracket.
+        var j = i + 1;
+        while (j < s.length) {
+          if (s[j] === " " || s[j] === "\t" || s[j] === "\r" || s[j] === "\n") { j++; continue; }
+          if (s[j] === "/" && s[j + 1] === "/") { while (j < s.length && s[j] !== "\n") j++; continue; }
+          if (s[j] === "/" && s[j + 1] === "*") { j += 2; while (j < s.length && !(s[j] === "*" && s[j + 1] === "/")) j++; j += 2; continue; }
+          break;
+        }
+        if (s[j] === "}" || s[j] === "]") { i++; continue; }
+      }
       out += c;
       i++;
     }
@@ -53,19 +76,27 @@
     "// (per key; .jsonc wins) - an existing .json config keeps working unchanged.",
     "// Comments (// and /* */) are allowed in both files.",
     "//",
-    "// activeTheme: pick a custom theme - mario, sweet, nord, catppuccin-mocha,",
-    "// catppuccin-macchiato, catppuccin-frappe, catppuccin-latte - or author your own",
-    "// (see themes/README.md in the repo). Needs an app restart.",
+    "// activeTheme: pick a theme. The 7 built-ins are mario, sweet, nord,",
+    "// catppuccin-mocha, catppuccin-macchiato, catppuccin-frappe, catppuccin-latte;",
+    "// you can also name one of the 84 bundled community palette slugs (see",
+    "// themes/PALETTES.md), or author your own (see themes/README.md in the repo).",
+    "// Hand edits need an app restart; Ctrl+Shift+T and Settings -> Extra -> Themes",
+    "// apply immediately.",
     "//",
     "// growthbookOverrides (advanced, unsupported territory):",
+    "// The Extra > Features panel in the app's Settings dialog edits the same",
+    "// flags with a switch per flag. It writes claude-desktop-bin.json; entries you",
+    "// put here win per flag id, and that panel shows those as locked.",
     "// Every GrowthBook flag observed being read from the feature store in Claude",
     "// Desktop v1.21459.0 is listed below, commented out. Uncomment a line to force",
-    "// it; separate multiple active entries with commas (JSON rules apply after",
-    "// comments are stripped). true/false for switches; flags marked (value flag)",
+    "// it; separate multiple active entries with commas (a trailing comma after the",
+    "// last one is fine). true/false for switches; flags marked (value flag)",
     "// carry numbers/strings/objects - a bare true may be meaningless for those.",
-    "// Read on every flag (re)load: startup, the periodic refresh (~1h) and account",
-    "// changes - edits apply without a restart. Overrides win over Anthropic's",
-    "// server rollout. Flags force-enabled by claude-desktop-bin's binary patches",
+    "// This file is re-read on every flag load: startup, the periodic refresh (~1h)",
+    "// and account changes. That does NOT make a change take effect on its own -",
+    "// most gated features are wired up while the app starts, so restart after",
+    "// changing a flag. Overrides win over Anthropic's server rollout.",
+    "// Flags force-enabled by claude-desktop-bin's binary patches",
     "// (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this",
     "// file entirely. Active overrides are logged to logs/claude-patches.log.",
     "// Flag IDs are Anthropic-internal and can vanish or change meaning in any",
@@ -85,15 +116,15 @@
     "    // \"227459766\": true,    // documents list config (value flag)",
     "    // \"245679952\": true,    // suggestSkillsEnabled - model may proactively suggest relevant skills in sessions",
     "    // \"254738541\": true,    // proactive dispatch-orchestrator prompt (value flag)",
-    "    // \"286376943\": true,    // Plugin skills for system prompt — gates getPluginSkillsForSystemPrompt (new in v1.2278.0)",
-    "    // \"397125142\": true,    // Terminal server — gated: sessionType==='ccd'&&!isSSH AND this flag. CCD only, NOT cowork. ",
+    "    // \"286376943\": true,    // Plugin skills for system prompt - gates getPluginSkillsForSystemPrompt (new in v1.2278.0)",
+    "    // \"397125142\": true,    // Terminal server - gated: sessionType==='ccd'&&!isSSH AND this flag. CCD only, NOT cowork. ",
     "    // \"416245092\": true,    // GPU crash-streak marker file (default ON)",
     "    // \"434204418\": true,    // MCP non-blocking connection",
     "    // \"451382573\": true,    // DISABLE_BRIEF_MODE_STOP_HOOK env var for cowork/LAM sessions",
     "    // \"476513332\": true,    // check_interval_ticks config (value flag)",
     "    // \"552157343\": true,    // plugin add gating (default ON)",
     "    // \"554317356\": true,    // timeout ms (value flag)",
-    "    // \"629684104\": true,    // Assistant-error-recovery — gates synthesizing a recovery result (assistantUuid/resultUuid)",
+    "    // \"629684104\": true,    // Assistant-error-recovery - gates synthesizing a recovery result (assistantUuid/resultUuid)",
     "    // \"714014285\": true,    // CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING",
     "    // \"720735283\": true,    // Marketplace migration",
     "    // \"748063099\": true,    // VM client retry on pipe close",
@@ -102,8 +133,8 @@
     "    // \"790863764\": true,    // device_bash - combined gate with yukonSilver VM support",
     "    // \"873030668\": true,    // sorted-list source config (value flag)",
     "    // \"884132720\": true,    // OAuth scope passthrough - forwards the OAuth token scope into the CLI session env build: o",
-    "    // \"939257113\": true,    // Dispatch child session detection — isRemoteDispatchChild qualifier",
-    "    // \"975112542\": true,    // Cowork memory remote sync — canSyncCoworkMemoryRemotely()",
+    "    // \"939257113\": true,    // Dispatch child session detection - isRemoteDispatchChild qualifier",
+    "    // \"975112542\": true,    // Cowork memory remote sync - canSyncCoworkMemoryRemotely()",
     "    // \"982691970\": true,    // Cowork plugin host ops gate (dynamic import)",
     "    // \"1004628546\": true,   // consolidate-memory skill description overrides (value flag)",
     "    // \"1061122496\": true,   // worktree destroy - removeWorktree + deleteWorktreeBranch gate",
@@ -112,23 +143,23 @@
     "    // \"1129419822\": true,   // ENABLE_TOOL_SEARCH='auto' env var for LAM sessions",
     "    // \"1129583249\": true,   // branch-switch conflict detection (wouldBranchSwitchConflict)",
     "    // \"1143815894\": true,   // DO NOT ENABLE: bypasses the Cowork VM service and silently breaks skills/plugins",
-    "    // \"1197768857\": true,   // spaceMemoryBridge feature gate — registry entry rt('1197768857')?Ed:{status:'unavailable'}",
+    "    // \"1197768857\": true,   // spaceMemoryBridge feature gate - registry entry rt('1197768857')?Ed:{status:'unavailable'}",
     "    // \"1323782925\": true,   // dispatch APe qualifier",
     "    // \"1412563253\": true,   // askUserQuestion preview format ('html')",
-    "    // \"1434290056\": true,   // Dispatch code tasks permission mode — bypass-permissions for dispatch sessions (new in v1.",
+    "    // \"1434290056\": true,   // Dispatch code tasks permission mode - bypass-permissions for dispatch sessions (new in v1.",
     "    // \"1480778051\": true,   // render_rss_bytes memory-telemetry suppression (ON = skip emission)",
     "    // \"1544796833\": true,   // session-concurrency limits, e.g. maxConcurrentPerSession (value flag)",
-    "    // \"1569828280\": true,   // Binary-asset-fetch gate — if(!et('1569828280')){...gate_off...skipping binary asset fetch}",
+    "    // \"1569828280\": true,   // Binary-asset-fetch gate - if(!et('1569828280')){...gate_off...skipping binary asset fetch}",
     "    // \"1629866860\": true,   // claude_code numeric tuning value (value flag)",
     "    // \"1677081600\": true,   // dispatch orchestrator base URL override (value flag)",
-    "    // \"1696890383\": true,   // CLAUDE_COWORK_MEMORY_GUIDE env — passes memory guide to cowork sessions (also in force-ON ",
+    "    // \"1696890383\": true,   // CLAUDE_COWORK_MEMORY_GUIDE env - passes memory guide to cowork sessions (also in force-ON ",
     "    // \"1703762832\": true,   // onModelRefusalFallback retry - when ON, a refusal response with direction:'retry' in Agent",
     "    // \"1707927936\": true,   // size limit tuning, bytes (value flag)",
     "    // \"1748356779\": true,   // prompt template config: system_prompt/user_prompt (value flag)",
     "    // \"1824824999\": true,   // consolidate-memory skill v2 - server-configured description/prompt text",
     "    // \"1893165035\": true,   // enabled+categories config object (value flag)",
     "    // \"1924247864\": true,   // device-registry gate (Ylt)",
-    "    // \"1928275548\": true,   // framebufferPreview feature — dev-gated (inside MW())",
+    "    // \"1928275548\": true,   // framebufferPreview feature - dev-gated (inside MW())",
     "    // \"1936081873\": true,   // system-prompt build-skip",
     "    // \"1942781881\": true,   // Prompt suggestions in sessions",
     "    // \"1947305033\": true,   // augments a tool description",
@@ -136,7 +167,7 @@
     "    // \"1972091654\": true,   // askClaude device RPC",
     "    // \"1978029737\": true,   // pluginsSyncIntervalMs (value flag)",
     "    // \"1992087837\": true,   // chillingSlothPool - Code worktree warm pool (pre-warmed session starts)",
-    "    // \"2049450122\": true,   // Session handoff — gates cross-device session activity broadcasting (com.anthropic.claude.s",
+    "    // \"2049450122\": true,   // Session handoff - gates cross-device session activity broadcasting (com.anthropic.claude.s",
     "    // \"2051751800\": true,   // Chrome permission-mode skip_all_permission_checks resolver gate",
     "    // \"2051942385\": true,   // CIC can-use-tool",
     "    // \"2067027393\": true,   // canLaunchCodeSession - launch-a-Code-session suggestion tool for the chat agent",
@@ -146,24 +177,24 @@
     "    // \"2143883161\": true,   // /code/ route gate",
     "    // \"2192324205\": true,   // tool-result formatting - renders dispatch-child/Code sub-session result blocks in the transcript",
     "    // \"2216414644\": true,   // Remote session control (Dispatch mobile)",
-    "    // \"2216901299\": true,   // Org policy backend check — remote management policy enforcement",
+    "    // \"2216901299\": true,   // Org policy backend check - remote management policy enforcement",
     "    // \"2229805612\": true,   // remote_control_at_startup default",
     "    // \"2246535838\": true,   // Local MCP server prefix (local:)",
     "    // \"2307090146\": true,   // Plugin OAuth storage gate (also added to force-ON defaults map)",
     "    // \"2309422447\": true,   // mergeMessageBufferIfActive",
     "    // \"2339084909\": true,   // VM monitoring fallback (non-heartbeat)",
     "    // \"2340532315\": true,   // Plugin sync on session start",
-    "    // \"2345107588\": true,   // GrowthBook cache persistence — persist/seed GrowthBook cache from/into sessions (new in v1",
+    "    // \"2345107588\": true,   // GrowthBook cache persistence - persist/seed GrowthBook cache from/into sessions (new in v1",
     "    // \"2345515473\": true,   // Sessions-bridge account-change reevaluation",
     "    // \"2349950458\": true,   // Scheduled task notifications",
-    "    // \"2392971184\": true,   // Replay user messages — adds --replay-user-messages to CLI args for session resume; also en",
+    "    // \"2392971184\": true,   // Replay user messages - adds --replay-user-messages to CLI args for session resume; also en",
     "    // \"2393677837\": true,   // PreToolUse hook for worktree-aware tool input validation",
     "    // \"2427043945\": true,   // numeric rate/threshold (value flag)",
     "    // \"2438134137\": true,   // Figma/design OAuth scope expansion",
     "    // \"2614807392\": true,   // Session feature A",
     "    // \"2720310975\": true,   // side-chat tools",
     "    // \"2724639973\": true,   // Session governor evictionEnabled - memory-pressure-based session eviction",
-    "    // \"2725876754\": true,   // Org CLI exec policies — gates reading orgCliExecPolicies for plugin tool permission checks",
+    "    // \"2725876754\": true,   // Org CLI exec policies - gates reading orgCliExecPolicies for plugin tool permission checks",
     "    // \"2726556121\": true,   // INVERTED: ON disables the SSH file-transfer fast-path",
     "    // \"2745857735\": true,   // LAM remote folder-access homeDirectories + remoteFileTools",
     "    // \"2795002549\": true,   // Projects OAuth scopes",
@@ -173,13 +204,13 @@
     "    // \"2940196192\": true,   // coworkArtifacts - Cowork artifacts (list/thumbnails IPC, artifact inference, VM mount)",
     "    // \"2961849615\": true,   // revive CCD sessions after relogin",
     "    // \"2976814254\": true,   // claudePreview/launch capability - dev-server preview availability (browser preview also needs 17519066)",
-    "    // \"2979038612\": true,   // Session notifications — queueSessionNotification for model switch, folder access",
+    "    // \"2979038612\": true,   // Session notifications - queueSessionNotification for model switch, folder access",
     "    // \"3045399524\": true,   // session config: enabled/alwaysLoad (value flag)",
     "    // \"3214976288\": true,   // \"morning\" prompt/skill isEnabled",
     "    // \"3246569822\": true,   // canSaveSkill - save-as-skill capability in sessions",
     "    // \"3300773012\": true,   // scheduled-task skill description override (value flag)",
     "    // \"3302457740\": true,   // hosts allowlist config (value flag)",
-    "    // \"3371831021\": true,   // cuOnlyMode — computer-use-only session variant",
+    "    // \"3371831021\": true,   // cuOnlyMode - computer-use-only session variant",
     "    // \"3377630395\": true,   // overlay/window mount toggle",
     "    // \"3431784271\": true,   // plugin backfill prune of unresolvable plugins (pruneUnresolvablePlugins)",
     "    // \"3444158716\": true,   // Imagine/Visualize MCP server for cowork+ccd sessions",
@@ -192,17 +223,17 @@
     "    // \"3602629573\": true,   // JitlessPolicy process kill-switch (live listener; feeds ProcessKillSwitchEngaged)",
     "    // \"3633961296\": true,   // plugin enabled-state backfill",
     "    // \"3646818354\": true,   // shouldKillOnIdlePause() returns !Ct('3646818354') - when ON, the session is NOT killed on ",
-    "    // \"3691521536\": true,   // Stealth updater — nudge updates when no active sessions",
+    "    // \"3691521536\": true,   // Stealth updater - nudge updates when no active sessions",
     "    // \"3723845789\": true,   // Additional Cowork tools",
     "    // \"3758515526\": true,   // official plugins repo override (value flag)",
-    "    // \"3778159589\": true,   // Device-stale-relogin — rt('3778159589')?e():A() selecting the relogin path (markDeviceStal",
+    "    // \"3778159589\": true,   // Device-stale-relogin - rt('3778159589')?e():A() selecting the relogin path (markDeviceStal",
     "    // \"3807767338\": true,   // seedPolicyLimitsIntoSession / refreshPolicyLimitsPersist - org policy-limit persistence",
     "    // \"3976799455\": true,   // away-recap generation (maybeGenerateAwayRecap)",
     "    // \"3982397363\": true,   // stale-model-clear robustness toggle",
     "    // \"4034153053\": true,   // isEpitaxyPreviewEnabled (gated on native support probe)",
     "    // \"4066504968\": true,   // guided Cowork setup skill description (value flag)",
     "    // \"4116586025\": true,   // louderPenguin / Code tab master gate",
-    "    // \"4141490266\": true,   // Framebuffer system prompt injection — adds instructions when Framebuffer server active",
+    "    // \"4141490266\": true,   // Framebuffer system prompt injection - adds instructions when Framebuffer server active",
     "    // \"4153934152\": true,   // CLAUDE_CODE_SKIP_PRECOMPACT_LOAD",
     "    // \"4160352601\": true,   // VM heartbeat monitoring",
     "    // \"4274871493\": true,   // pluginEnabledState - org-backend plugin enabled-state fetch (enterprise, co-gated on other org flags)",
@@ -212,6 +243,39 @@
     "}",
     ""
   ].join("\n");
+
+  // The TEMPLATE above is the catalog: one commented-out line per flag observed
+  // being read from the feature store, with a human note after it. Parsing it
+  // rather than keeping a second copy means the .jsonc template and the Extra
+  // settings page can never disagree about which flags exist.
+  var CATALOG_RE = /^\s*\/\/\s*"(\d+)"\s*:\s*[^,]*,\s*\/\/\s*(.*)$/;
+  var CATALOG_EXPECTED = 134;
+
+  function flagCatalog() {
+    if (catalogCache) return catalogCache;
+    var out = [];
+    var lines = TEMPLATE.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(CATALOG_RE);
+      if (!m) continue;
+      var note = m[2].replace(/\s+$/, "");
+      out.push({
+        id: m[1],
+        note: note,
+        // "(value flag)" carries a number/string/object: a bare true would be
+        // meaningless, so the UI renders these read-only.
+        valueFlag: note.indexOf("(value flag") >= 0,
+        // Non-empty = never offer this as an ordinary toggle.
+        warn: /^DO NOT ENABLE/.test(note) ? note : ""
+      });
+    }
+    if (out.length !== CATALOG_EXPECTED) {
+      diag("[cdb-flags] flag catalog parsed " + out.length + " entries, expected " +
+        CATALOG_EXPECTED + " - the .jsonc template drifted; update CATALOG_EXPECTED in js/growthbook_overrides.js");
+    }
+    catalogCache = out;
+    return out;
+  }
 
   function readFileOrNull(fs, p) {
     try {
@@ -247,7 +311,7 @@
         diag("[cdb-flags] created config template at " + paths.jsonc);
       } catch (e2) {}
     }
-    var combined = String(rawJ) + " " + String(rawC);
+    var combined = String(rawJ) + "\0" + String(rawC);
     if (combined === lastRaw) return lastParsed;
     lastRaw = combined;
     var oJ = parseOverrides(rawJ, paths.json);
@@ -299,8 +363,13 @@
       var uo = readOverrides();
       for (uk in (uo || {})) o[uk] = uo[uk]; // user override wins over built-in
       if (!features || typeof features !== "object") return features;
+      // Snapshot the untouched server/cache map before anything is applied, so
+      // the Extra settings page can tell "on for your account" apart from "on
+      // because you overrode it".
+      lastServer = {};
+      for (var sk in features) lastServer[sk] = features[sk];
       var ids = Object.keys(o);
-      if (!ids.length) return features;
+      if (!ids.length) { lastEffective = lastServer; return features; }
       var out = {};
       for (var k in features) out[k] = features[k];
       var applied = [];
@@ -317,10 +386,23 @@
         var msg = "[cdb-flags] applying " + applied.length + " GrowthBook override(s): " + applied.join(", ");
         if (msg !== announced) { announced = msg; diag(msg); }
       }
+      lastEffective = out;
       return out;
     } catch (e) {
       diag("[cdb-flags] override hook error: " + (e && e.message));
       return features;
     }
+  };
+
+  // Read lazily by patches/add_feature_extra_settings.nim (which runs BEFORE
+  // this IIFE's siblings, hence functions rather than values).
+  globalThis.__cdbGbFlags = {
+    version: 1,
+    catalog: flagCatalog,
+    server: function () { return lastServer; },
+    effective: function () { return lastEffective; },
+    overrides: readOverrides,
+    builtins: builtinForces,
+    configPath: configPaths
   };
 })();

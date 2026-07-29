@@ -2,6 +2,71 @@
 
 All notable changes to the claude-desktop-bin packages will be documented in this file.
 
+## 2026-07-29
+
+### 84 community color palettes now ship with the package
+
+Alongside the seven curated built-in themes, the theme patch now bundles 84 palettes converted from the [Noctalia community-palettes](https://github.com/noctalia-dev/community-palettes) collection - Rose Pine, Gruvbox, Everforest, Kanagawa, Solarized, Tokyo Night, the Catppuccin accent variants and many more. Each one is a full dual light/dark token set, so `"activeTheme": "rose-pine-moon"` is all a config needs and Claude's own light/dark toggle keeps working. Theme resolution order is your own `themes` entries first, then the built-ins, then the community palettes, so a theme you author under the same slug replaces the bundled one instead of colliding with it.
+
+The conversion is done by `scripts/generate-community-themes.mjs`, which maps each palette's Material-ish roles onto our CSS tokens, fixes border polarity (community palettes follow surface polarity; claude.ai needs the opposite), substitutes button-label colors that would be unreadable on their own accent, and renders one swatch card per palette. It is deterministic and takes the collection path as its argument, so refreshing after the upstream collection changes is a single command. The role-to-token mapping is documented in the script's header.
+
+[themes/PALETTES.md](themes/PALETTES.md) is the visual catalog: all 97 bundled palettes with their swatch cards and slugs, an index, and notes on the ones with deliberately unusual variants (the AMOLED palettes' pure-black backgrounds, the muted mid-tone light variants of Everforest and the Kanagawa pair).
+
+### Six gaming themes and a Gaming category
+
+Six palettes drawn from games ship alongside the curated built-ins: **PlayStation** (PS1 console gray over charcoal blue-black, PlayStation-blue accent, status colors borrowed from the controller's button symbols), **Game Boy** (DMG shell gray with magenta buttons in light, pea-green LCD in dark), **Final Fantasy** (parchment cream over the classic menu blue with a crystal-gold accent), **Zelda** (forest green and gold), **Warcraft** (parchment gold and Alliance blue, with orc-green success) and **Dragon Ball** (sky and white over deep blue, bright orange accent). They resolve at built-in rank, so `"activeTheme": "gameboy"` is all a config needs, and they are authored in `js/gaming_themes.json`.
+
+They are grouped by a new `category` field rather than by which registry they come from, so they get their own divider-separated **Gaming** section in both the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker and Settings -> Extra -> Themes. Mario carries the same category, so it moves into that section too - seven cards in all. A theme of your own can join it with `"category": "gaming"`.
+
+### Every bundled palette now has its own loading spinner
+
+The spinner reshape used to be a built-in-only luxury. All 84 community palettes now carry one too, drawn from the palette's name or its colors: a stag for Everdeer, aurora ribbons for Nord Aurora, a great-wave curl across the Kanagawa family, one curled sleeping cat across every Catppuccin variant, an ensō brush circle for Zenbones, a crescent moon for Tokyo Night Moon. There are 53 distinct designs across the 84 slugs, because families share a shape on purpose.
+
+The glyphs are curated in `scripts/community-spinners.json` and merged into the palettes by `scripts/generate-community-themes.mjs`, so regenerating after the upstream collection changes is still one command. The generator hard-fails rather than shipping a broken glyph: slug parity is checked in both directions, path data must tokenize as SVG, and any explicitly colored fill must clear 2.5:1 against both variants' backgrounds. The same spec contract is asserted while the patch compiles, for every bundled theme.
+
+### Theme switches now re-theme the loading glyph too
+
+Switching theme changed the colors live but left the loading glyph on the old shape until the app was restarted, because reshaping it rewrote the star's SVG paths in place and the original geometry the matcher keys on was gone after the first pass.
+
+The engine now takes custody of the original glyph: the first time it reshapes an element it stashes that element's untouched markup, keeps the first capture as a document-wide fallback for glyphs the page later clones, and tracks every element it owns. A theme switch re-renders all of them with the new spec and sweeps for any that appeared since; reverting to **Claude default** puts Claude's own star back. Its `MutationObserver` installs the spec in effect now rather than the one baked in at injection time, so glyphs rendered after a switch get the new shape as well.
+
+**Nothing about a theme switch needs a restart any more** - colors, fonts, `customCss` and the spinner all follow the click, in every open window. Hand-editing `claude-desktop-bin.jsonc` still does, since that file is read at startup.
+
+### A "flip" spinner animation for two-frame sprites
+
+Spinner specs accept a fourth animation, `flip`, next to `pulse`, `spin` and `bounce`. It renders two frames at once (`paths` and `paths2`) and hard-cuts between them at about two frames per second with no interpolation, the way a retro sprite animates: the Zelda hero takes a step, the Warcraft peon swings his pick. Six community glyphs use it as well, among them a blinking terminal cursor and a checker-diamond flicker.
+
+`paths2` is required exactly when the animation is `flip` and ignored otherwise, and that pairing is asserted at build time, so a half-authored sprite fails the build instead of shipping as a glyph that flickers against nothing.
+
+### Theme picker on Ctrl+Shift+T
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> in any Claude Desktop window and a searchable gallery opens with every theme available to you - your own, the gaming palettes, the built-ins, and the community palettes, each in its own section - every card showing a dark and a light row of swatches. Click one and it applies immediately in every open window; no restart, no editing a file by hand. A "Claude default" entry at the top reverts to Claude's stock palette.
+
+The choice is persisted to `claude-desktop-bin.jsonc` by a surgical text edit that replaces only the `activeTheme` value, so comments and every other key survive; if the file does not exist yet it is created from a short commented template. Colors, the `chatFont` override, `customCss` and the loading spinner all switch live.
+
+The picker is a local window driven by a key handler in the main process, so it does not depend on anything in claude.ai's bundle.
+
+### An "Extra" page in Claude's own Settings dialog
+
+Claude's Settings dialog now carries an **Extra** group with two panels:
+
+- **Themes** - the same registry as the picker, rendered as rows with color dots. Clicking one applies it live and saves it exactly as the picker does.
+- **Features** - the 134 catalogued GrowthBook feature flags as switches, so browsing and flipping a flag no longer means hand-editing a config file. Flags upstream already enables start switched on, and turning one off writes an explicit `false`. Flags that carry a value rather than a switch are read-only, and the one flag documented as breaking Cowork is not toggleable.
+
+Flag changes are written to `growthbookOverrides` in `claude-desktop-bin.json`; the panel states in red that they need a restart (the features they gate are wired up at startup) and offers a Restart now button. Anything set by hand in `claude-desktop-bin.jsonc` is shown as owned by that file and left alone - the hand-edited value still wins per flag ID.
+
+The group looks native because it is not drawn from scratch: its header and its two rows are clones of Claude's own, so font, size, indentation, the icon box and the selected pill all come from Claude's stylesheet, and the selected look is handed back to the row it was borrowed from when you navigate away. Only the word "Extra" and the two glyphs are ours.
+
+Because the Settings dialog is claude.ai markup this package does not control, the injector anchors on semantics only and fails soft: if it cannot find the dialog it logs one line and changes nothing. The shape it is fitted to is recorded verbatim in [baseline/SETTINGS_NAV_CAPTURE.md](baseline/SETTINGS_NAV_CAPTURE.md), and a sanitized DOM-shape line in `claude-patches.log` names the anchor to refit when claude.ai changes. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> is entirely local and always available.
+
+### Fix: uncommenting a single flag line no longer invalidates the whole config
+
+`claude-desktop-bin.jsonc` is auto-created as a template with every known flag commented out, one per line, each already ending in a comma - so uncommenting exactly one entry left a trailing comma before the closing brace, which is not valid JSON. The parser rejected the file silently, and with it every other setting in it, `activeTheme` included: the documented "uncomment an entry to activate it" workflow appeared to do nothing. All readers of the file now tolerate trailing commas.
+
+### Fix: chat header, "Quick answer" band and disclaimer strip now follow the theme
+
+With a custom theme active, three chat regions kept Claude's stock background: the sticky conversation header, the "Quick answer" band above the composer, and the disclaimer strip below it. claude.ai's desktop-frame stylesheet redefines the background token on the container that wraps the whole chat view, and a CSS variable set directly on an element always beats one inherited from an ancestor - so those regions never saw the theme's value. The theme engine now re-asserts its background ramp at that container too (via collision-proof mirror variables), which also fixes the two regions that paint the token through gradients. A regression suite renders the affected elements against the real claude.ai CSS and asserts the computed colors in both modes.
+
 ## 2026-07-28
 
 ### Arch / Manjaro: install from our own signed pacman repository

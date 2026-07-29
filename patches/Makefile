@@ -34,8 +34,28 @@ fix_computer_use_linux: \
 fix_cowork_font: ../js/fix_cowork_font.js
 
 # Theme patch embeds the spinner-reshape installer (swaps the loading-star SVG
-# for the active theme's custom shape) via staticRead.
-add_feature_custom_themes: ../js/spinner_injector.js
+# for the active theme's custom shape) and the bundled community + gaming palette
+# collections via staticRead.
+add_feature_custom_themes: \
+  ../js/spinner_injector.js \
+  ../js/community_themes.json \
+  ../js/gaming_themes.json
+
+# Theme picker embeds its page + preload via staticRead.
+add_feature_theme_picker: ../js/theme_picker_page.html ../js/theme_picker_preload.js
+
+# Extra settings area: main-process half embeds the injected page script and its
+# stylesheet; the bridge half embeds the preload snippet.
+add_feature_extra_settings: \
+  ../js/extra_settings_main.js \
+  ../js/extra_settings_page.js \
+  ../js/extra_settings_page.css
+
+add_feature_extra_settings_bridge: ../js/extra_settings_bridge.js
+
+# The flag catalog the Extra settings page renders is parsed out of this file's
+# .jsonc template at runtime.
+add_growthbook_overrides: ../js/growthbook_overrides.js
 
 clean:
 	@rm -rf $(BINS) .nimcache

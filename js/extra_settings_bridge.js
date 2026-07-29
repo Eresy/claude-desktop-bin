@@ -1,0 +1,73 @@
+/*
+ * extra_settings_bridge.js - the ONLY channel the claude.ai page can use to
+ * reach the Extra settings area. Injected into .vite/build/mainView.js (the
+ * preload of the mainView WebContentsView) by
+ * patches/add_feature_extra_settings_bridge.nim.
+ *
+ * mainView.js is a sandboxed preload: require("electron") is available for this
+ * subset, nothing else is.
+ *
+ * SECURITY: the page behind this preload is REMOTE code (claude.ai). Therefore
+ * every method below is a FIXED wrapper around one FIXED channel name - there is
+ * deliberately no generic invoke(channel, ...) passthrough that would let remote
+ * code reach arbitrary ipcMain handlers. Argument shapes are re-validated on the
+ * main side (patches/add_feature_extra_settings.nim); nothing here is trusted.
+ *
+ * Every channel resolves to a plain {ok:...} record so the page can render a
+ * real message instead of swallowing a rejected promise.
+ */
+"use strict";
+
+(function () {
+  var electron = require("electron");
+  var contextBridge = electron.contextBridge;
+  var ipcRenderer = electron.ipcRenderer;
+  if (!contextBridge || !ipcRenderer) return;
+
+  contextBridge.exposeInMainWorld("cdbExtra", {
+    // __cdb_extra_bridge
+    version: 1,
+
+    // Themes. themes-list is our own reduced projection (name/displayName/
+    // source/swatches) so the full token maps of ~90 palettes never cross into
+    // the remote page; apply/active are the theme picker's own channels.
+    themesList: function () {
+      return ipcRenderer.invoke("cdb-extra:themes-list");
+    },
+    themesActive: function () {
+      return ipcRenderer.invoke("cdb-themes:active");
+    },
+    themesApply: function (name) {
+      return ipcRenderer.invoke("cdb-themes:apply", name);
+    },
+
+    // GrowthBook feature flags.
+    flagsCatalog: function () {
+      return ipcRenderer.invoke("cdb-flags:catalog");
+    },
+    flagsRead: function () {
+      return ipcRenderer.invoke("cdb-flags:read");
+    },
+    flagsSet: function (id, value) {
+      return ipcRenderer.invoke("cdb-flags:set", id, value);
+    },
+    flagsUnset: function (id) {
+      return ipcRenderer.invoke("cdb-flags:unset", id);
+    },
+
+    // Resolved config file paths, shown in both panels.
+    paths: function () {
+      return ipcRenderer.invoke("cdb-extra:paths");
+    },
+
+    // app.relaunch() + app.exit(0).
+    appRelaunch: function () {
+      return ipcRenderer.invoke("cdb-app:relaunch");
+    },
+
+    // One-line diagnostics into logs/claude-patches.log (deduped main-side).
+    diag: function (message) {
+      return ipcRenderer.invoke("cdb-extra:diag", String(message));
+    }
+  });
+})();

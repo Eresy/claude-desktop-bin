@@ -1,7 +1,11 @@
 # Spinner / Brand-Glyph Replacement via Webview Injection
 
-**Status:** Design notes (not yet implemented). Needs iterative *live* testing in the
-running app by the user (single-instance lock + no auto-install in this project).
+**Status:** Implemented and shipped. The runtime engine is `js/spinner_injector.js`,
+installed by `patches/add_feature_custom_themes.nim`; every bundled palette carries a
+spinner, and a theme switch re-themes the glyph live. These notes remain the design
+record: why injection rather than a bundle patch, how the glyph is identified, and what
+the failure modes are. The shape catalog is in
+[SPINNER_SHAPES.md](SPINNER_SHAPES.md).
 
 **Goal:** Replace the Anthropic 7-point "starburst/asterisk" brand glyph that
 claude.ai renders as the greeting icon and the in-progress loading/thinking
@@ -45,15 +49,19 @@ _app.on("web-contents-created", function(_ev, wc){
 
 `dom-ready` fires once per navigation/document. For a SPA like claude.ai the document
 is **not** reloaded on in-app navigation, so the installer must itself be resilient to
-later DOM churn (MutationObserver) rather than relying on re-injection. The IIFE below
-is also guarded so a second `executeJavaScript` (e.g. on a real reload) is a no-op.
+later DOM churn (MutationObserver) rather than relying on re-injection.
 
-**The spinner spec must be embedded into the injected JS string at Nim build time**
-(read from the same `claude-desktop-bin.json` config the theme patch reads, under a new
-`spinner` key per theme), exactly like `__cdb_css` is built. The runtime JS does
-**not** read the config file itself - the Nim/main-process side serializes the spec to
-JSON and string-concatenates it into the script, so the renderer receives a literal
-object.
+The same `executeJavaScript` path is **also** used as the live channel: on every theme
+switch the main process re-runs the injector file, with the new spec prepended, in every
+open window. A second run does not install a second engine - it pushes the new spec into
+the one already there (section 6).
+
+**The spinner spec is serialized into the injected JS string by the main process**
+(from the active theme's `spinner` key, whether that theme is a built-in, a gaming
+palette, a community palette, or one of yours in `claude-desktop-bin.jsonc`), exactly
+like `__cdb_css` is built. The runtime JS does **not** read the config file itself - the
+main side serializes the spec to JSON and string-concatenates it into the script as
+`var __CDB_SPINNER_SPEC = <json|null>;`, so the renderer receives a literal object.
 
 ---
 
@@ -96,16 +104,22 @@ PATH_SIGNATURE = "m19.6 66.5 19.7-11"
 
 This 18-char prefix is the start of the upper-left ray of the asterisk and is highly
 distinctive (no other icon would start a path at exactly `19.6 66.5` then draw
-`19.7-11`). We test with `path.getAttribute("d").trim().startsWith(PATH_SIGNATURE)`
-(also try a looser `indexOf` fallback in case claude.ai prepends a `M0 0` or
-normalizes whitespace - see code).
+`19.7-11`). We test with `indexOf` rather than `startsWith`, so a prepended `M0 0` or
+normalized whitespace ahead of the run does not defeat it.
+
+**As shipped the matcher carries three fragments, not one:** the original run, its
+continuation (`19.7-11 .3-1-.3-.5`) and a looser slice of the same run
+(`66.5 19.7-11`). A path matches if it contains *any* of them, so upstream re-emitting a
+single coordinate run does not blind the matcher. A theme's `match` replaces the whole
+set and accepts either a string or an array of strings.
 
 > **Maintenance note (version-sensitive):** if Anthropic ever re-exports the logo with
-> different coordinates, `PATH_SIGNATURE` must be updated. This is exactly the kind of
-> remote-rendered value that this repo cannot pin - so the installer logs a one-line
-> diagnostic (`[spinner] matched N glyph(s)`) so the user can tell from the webview
-> console whether the signature still matches after an upstream change. Treat a sudden
-> `matched 0` as "the logo geometry changed", not "feature removed".
+> coordinates that miss all three fragments, the signature set must be updated. This is
+> exactly the kind of remote-rendered value that this repo cannot pin - so the installer
+> logs a one-line diagnostic (`[spinner] themed N glyph(s)`) so the user can tell from
+> the webview console whether the signature still matches after an upstream change. Treat
+> a sudden `themed 0` as "the logo geometry changed", not "feature removed". A per-theme
+> `match` fixes it without a rebuild.
 
 ---
 
@@ -181,15 +195,17 @@ a built-in theme override or a custom theme). Shape:
     "mario": {
       "--accent-brand": "0 84% 52%",
       // ... other CSS vars ...
+      "category": "gaming",              // optional; groups the theme in the picker
       "spinner": {
         "viewBox": "0 0 100 100",        // optional, default "0 0 100 100"
-        "match": "m19.6 66.5 19.7-11",   // optional override of PATH_SIGNATURE
-        "animation": "spin",             // optional: "spin" | "bounce" | "pulse" | null
+        "match": "m19.6 66.5 19.7-11",   // optional override of the signature set
+        "animation": "spin",             // optional: "spin"|"bounce"|"pulse"|"flip"|null
         "paths": [
           { "d": "M...", "fill": "#E52521" },
           { "d": "M...", "fill": "#FFFFFF" },
           { "d": "M...", "fill": "currentColor" }
-        ]
+        ],
+        "paths2": [ /* second sprite frame - required iff animation is "flip" */ ]
       }
     }
   }
@@ -201,9 +217,26 @@ a built-in theme override or a custom theme). Shape:
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
 | `paths` | array of `{d, fill?}` | (required) | Ordered `<path>` elements. `fill` omitted or `"currentColor"` -> follows theme accent via `fill-current`. Explicit hex/`hsl()` -> fixed color (needed for multi-color shapes like the mushroom). |
+| `paths2` | array of `{d, fill?}` | `[]` | The second sprite frame. **Required if and only if** `animation` is `"flip"`: a `flip` spec without it is refused, and on any other animation it is ignored with a diagnostic line. |
 | `viewBox` | string | `"0 0 100 100"` | SVG coordinate system. Keep `0 0 100 100` to match the original and avoid resizing surprises. |
-| `match` | string | built-in `PATH_SIGNATURE` | Lets a theme override the detection substring if upstream geometry changes, without rebuilding the patch. |
-| `animation` | string\|null | `null` | Optional injected animation (see section 4). `null` = inherit whatever claude.ai applies. |
+| `match` | string \| array of strings | the built-in three-fragment signature set | Lets a theme override detection if upstream geometry changes, without rebuilding the patch. Replaces the whole set. |
+| `animation` | string\|null | `null` | Optional injected animation (see section 4). `null` = inherit whatever claude.ai applies. An unrecognized name is ignored with a diagnostic line. |
+
+A theme may also carry a sibling **`category`** string (outside `spinner`).
+`"category": "gaming"` gives it its own divider-separated section in the
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker and in Settings -> Extra -> Themes,
+independently of the tier it resolves from - which is how `mario` sits in the Gaming
+section while still being a built-in.
+
+### Build-time validation
+
+Every bundled theme's spec is parsed and asserted while the Nim patch compiles
+(`validateSpinner` in `patches/add_feature_custom_themes.nim`): `spinner` must be an
+object, `paths` must hold at least one real `{d: "..."}` entry, any `fill` must be a
+string, `animation` must be one of `pulse|spin|bounce|flip`, `viewBox` must be a string,
+and `paths2` must be present exactly when the animation is `flip`. A contract violation
+**fails the build loud** instead of shipping a glyph that cannot render. The community
+generator adds slug-parity, path-data tokenizing and fill-contrast gates on top.
 
 The **default star** is effectively `{ "paths": [{ "d": "<full star path>", "fill":
 "currentColor" }] }` - single path, accent-colored. A mushroom needs multiple paths
@@ -214,12 +247,16 @@ with explicit fills (red cap, white spots/face, optional dark outline).
 The Nim/main side serializes the active theme's `spinner` object to JSON and bakes it
 into the script as `var SPEC = <json>;`. The IIFE:
 
-1. bails immediately if `SPEC` is falsy or `SPEC.paths` is empty (feature opt-in);
-2. computes a `specVersion` (cheap hash of the JSON) for the idempotency stamp;
-3. installs the sweep + observer described above;
-4. for each matched `<svg>`: sets `viewBox` if provided, removes existing children,
-   appends one `<path>` per `SPEC.paths` entry (namespaced), applies optional animation
-   class, stamps `data-cdb-spinner=specVersion`.
+1. installs the engine once per window (a re-run only pushes the new spec);
+2. validates the spec and refuses a malformed one, leaving the glyph on screen alone;
+3. computes a `specVersion` (cheap hash of the normalized spec) for the idempotency stamp;
+4. installs the sweep + observer described above;
+5. for each matched `<svg>`: stashes the original children + `viewBox` for a later
+   restore, sets `viewBox` if provided, removes existing children, appends one `<path>`
+   per `SPEC.paths` entry (namespaced; two `<g data-cdb-frame>` groups for `flip`),
+   applies the optional animation class, stamps `data-cdb-spinner=specVersion`;
+6. treats a **null/empty** spec as "restore Claude's own glyph" rather than "do nothing" -
+   the engine and its observer stay armed so a later apply can still theme the page.
 
 ---
 
@@ -231,17 +268,31 @@ the original `<svg>` and wrapper (approach a), **those classes still apply to ou
 replaced paths for free** - we generally do nothing and inherit the existing motion.
 
 If a theme wants an *additional* or *custom* motion (`animation: "spin"|"bounce"|
-"pulse"`), inject a scoped keyframes block **once** and add a class to the replaced
+"pulse"|"flip"`), a scoped keyframes block is injected and a class added to the replaced
 `<svg>`:
 
 ```css
 @keyframes cdbSpin   { to   { transform: rotate(360deg); } }
 @keyframes cdbBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12%)} }
 @keyframes cdbPulse  { 0%,100%{opacity:1} 50%{opacity:.45} }
+@keyframes cdbFlipA  { from { opacity: 1 } to { opacity: 0 } }
+@keyframes cdbFlipB  { from { opacity: 0 } to { opacity: 1 } }
 svg[data-cdb-spinner].cdb-anim-spin   { animation: cdbSpin 1s linear infinite;        transform-origin:50% 50%; transform-box:fill-box; }
 svg[data-cdb-spinner].cdb-anim-bounce { animation: cdbBounce .8s ease-in-out infinite; transform-origin:50% 50%; transform-box:fill-box; }
 svg[data-cdb-spinner].cdb-anim-pulse  { animation: cdbPulse 1.2s ease-in-out infinite; }
+svg[data-cdb-spinner].cdb-anim-flip [data-cdb-frame="1"] { animation: cdbFlipA 1s steps(2,jump-none) infinite; }
+svg[data-cdb-spinner].cdb-anim-flip [data-cdb-frame="2"] { animation: cdbFlipB 1s steps(2,jump-none) infinite; }
 ```
+
+**All five keyframe names ship with every theme's CSS**, whichever animation the active
+theme uses. That is a live-switching requirement: the sheet already on the page must
+carry the keyframes the *next* shape may want, or a switch would land on a shape whose
+animation has no definition.
+
+**`flip` is a two-frame sprite cycle, not a tween.** The renderer emits both frames at
+once, each wrapped in `<g data-cdb-frame="1">` / `<g data-cdb-frame="2">`, and the
+`steps(2, jump-none)` pair above hard-cuts their opacity at ~2 frames/sec. No
+interpolation, so a hero silhouette reads as taking a step rather than sliding.
 
 Notes to avoid **fighting** claude.ai's own animation:
 
@@ -336,126 +387,89 @@ A **minimal flat** variant (no outline, 3 colors) for first testing:
 
 ---
 
-## 6. The injected JS (copy-pasteable IIFE)
+## 6. The injected engine (`js/spinner_injector.js`)
 
-This is the runtime installer. `SPEC` is injected by the Nim/main side (serialized from
-the active theme's `spinner` object). For ad-hoc live testing you can paste this into
-the webview DevTools console after defining `SPEC` yourself.
+The runtime installer ships as `js/spinner_injector.js` - a self-guarding ES5 IIFE,
+`staticRead` into the Nim patch and evaluated with `var __CDB_SPINNER_SPEC = <json|null>;`
+prepended. Read that file for the authoritative code; this section records its contract.
+
+### Installed once, driven many times
 
 ```js
-;(function () {
-  // SPEC is baked in by the patch (var SPEC = <json from theme.spinner>;).
-  // For console testing, define it above this IIFE.
-  var SPEC = (typeof __CDB_SPINNER_SPEC !== "undefined") ? __CDB_SPINNER_SPEC : null;
-  if (!SPEC || !Array.isArray(SPEC.paths) || SPEC.paths.length === 0) return;
-
-  var SVGNS = "http://www.w3.org/2000/svg";
-  var DEFAULT_SIG = "m19.6 66.5 19.7-11";           // start of the Anthropic star ray
-  var SIG = (typeof SPEC.match === "string" && SPEC.match) ? SPEC.match : DEFAULT_SIG;
-  var VIEWBOX = SPEC.viewBox || "0 0 100 100";
-
-  // Cheap version stamp so a theme change re-processes previously-stamped svgs.
-  function hash(s){ var h=5381,i=s.length; while(i) h=(h*33)^s.charCodeAt(--i); return (h>>>0).toString(36); }
-  var VER = hash(JSON.stringify(SPEC));
-  var STAMP_ATTR = "data-cdb-spinner";
-
-  var ANIM_CLASS = SPEC.animation ? ("cdb-anim-" + String(SPEC.animation)) : null;
-
-  function isTargetSvg(svg) {
-    if (!svg || svg.namespaceURI !== SVGNS || svg.tagName.toLowerCase() !== "svg") return false;
-    if (svg.getAttribute(STAMP_ATTR) === VER) return false;            // already current
-    // cheap pre-filter: viewBox must look like the brand glyph box
-    var vb = (svg.getAttribute("viewBox") || "").trim();
-    if (vb !== "0 0 100 100") return false;
-    // precise: a child <path d> begins with the star signature
-    var paths = svg.getElementsByTagNameNS(SVGNS, "path");
-    for (var i = 0; i < paths.length; i++) {
-      var d = (paths[i].getAttribute("d") || "").trim();
-      if (d.indexOf(SIG) === 0 || d.indexOf(SIG) > -1) return true;    // prefix, else substring fallback
-    }
-    return false;
-  }
-
-  function replace(svg) {
-    if (SPEC.viewBox) svg.setAttribute("viewBox", VIEWBOX);
-    while (svg.firstChild) svg.removeChild(svg.firstChild);            // drop the star <path>(s)
-    for (var i = 0; i < SPEC.paths.length; i++) {
-      var p = SPEC.paths[i];
-      if (!p || !p.d) continue;
-      var path = document.createElementNS(SVGNS, "path");
-      path.setAttribute("d", p.d);
-      // omitted/currentColor -> inherit theme accent via the svg's fill-current class
-      if (p.fill && p.fill !== "currentColor") path.setAttribute("fill", p.fill);
-      svg.appendChild(path);
-    }
-    if (ANIM_CLASS) svg.classList.add(ANIM_CLASS);
-    svg.setAttribute(STAMP_ATTR, VER);                                // idempotency mark (also breaks observer loop)
-  }
-
-  function sweep(root) {
-    if (!root) return 0;
-    var n = 0, svgs;
-    try { svgs = (root.querySelectorAll ? root.querySelectorAll("svg") : []); } catch (e) { return 0; }
-    for (var i = 0; i < svgs.length; i++) {
-      if (isTargetSvg(svgs[i])) { replace(svgs[i]); n++; }
-    }
-    // root itself might BE an svg (added directly)
-    if (root.tagName && root.tagName.toLowerCase() === "svg" && isTargetSvg(root)) { replace(root); n++; }
-    return n;
-  }
-
-  // Initial full-document pass for glyphs already present.
-  try { var first = sweep(document.documentElement); if (first) console.log("[spinner] matched " + first + " glyph(s) on load"); }
-  catch (e) { console.log("[spinner] initial sweep error: " + e.message); }
-
-  // Debounced observer: collapse mutation bursts into one rAF-scheduled sweep.
-  // The STAMP_ATTR check makes re-seeing our own writes a no-op, so no infinite loop.
-  var pending = false, queued = [];
-  var obs = new MutationObserver(function (muts) {
-    for (var i = 0; i < muts.length; i++) {
-      var added = muts[i].addedNodes;
-      for (var j = 0; j < added.length; j++) {
-        if (added[j].nodeType === 1) queued.push(added[j]);           // ELEMENT_NODE only
-      }
-    }
-    if (pending || queued.length === 0) return;
-    pending = true;
-    (window.requestAnimationFrame || window.setTimeout)(function () {
-      pending = false;
-      var batch = queued; queued = [];
-      var total = 0;
-      for (var k = 0; k < batch.length; k++) total += sweep(batch[k]);
-      if (total) console.log("[spinner] matched " + total + " glyph(s) (observer)");
-    }, 16);
-  });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
-
-  // expose for live debugging / teardown
-  window.__cdbSpinner = { spec: SPEC, version: VER, sweep: sweep, disconnect: function(){ obs.disconnect(); } };
-})();
+window.__cdbSpinnerApply(spec)   // (re-)theme every glyph; returns {ok, applied, restored}
+window.__cdbSpinnerApply(null)   // restore Claude's own glyph
+window.__cdbSpinner = {
+  spec,            // the validated spec in effect (null = stock glyph)
+  version,         // its hash - the value in the data-cdb-spinner stamp
+  apply,           // same function as __cdbSpinnerApply
+  restore(),       // apply(null)
+  sweep(root),     // re-run the matcher under root with the current spec
+  managed(),       // how many <svg> elements the engine owns right now
+  disconnect()     // stop the MutationObserver
+};
 ```
 
-**Stricter alternative for loop-avoidance** (only if the stamp guard proves
-insufficient on some claude.ai layout): in `replace()`, `obs.disconnect()` before the
-DOM writes and `obs.observe(...)` again after. The downside is missing any *external*
-mutation that lands during our write window, so the stamp-guard approach above is
-preferred; this is a fallback.
+The file installs the engine only if `window.__cdbSpinnerApply` is not already a
+function. So the main process can re-run it per window on every theme switch: the second
+run skips installation (no duplicate observers) and just calls `apply()` with the new
+spec. That single property is what makes spinner shapes switch live.
+
+### Original-glyph custody
+
+`apply()` can put the star back because the engine never loses it. Before the **first**
+swap of an element, its child nodes and `viewBox` are cloned onto the element itself
+(`__cdbSpinnerOrig`), and the first such capture is also kept as a document-wide fallback
+for glyph elements the SPA cloned from one of ours. The stash is skipped for an element
+that already carries our stamp - its children are ours, not the original, and stashing
+them would make a later restore hand back *our* shape as "Claude's own".
+
+Restoring re-inserts the stashed children, puts the original `viewBox` back (removing the
+attribute if there wasn't one), drops every `cdb-anim-*` class and the
+`data-cdb-spinner` stamp, and forgets the element.
+
+### The other guards
+
+- **Reshaped elements are tracked** in a `MANAGED` list, pruned against
+  `document.documentElement.contains()` on each apply, so the list follows the live page.
+- **The observer always sweeps with the *current* spec**, not the one baked in at
+  injection time, so a glyph rendered after a switch gets the new shape.
+- **Validation refuses rather than half-renders:** no usable `{d}` entry, or `flip`
+  without `paths2`, logs `[spinner] refusing spinner spec: ...` and leaves the glyph as
+  it is.
+- **`createElementNS` + `setAttribute` only** - never `innerHTML`, which is unreliable
+  for SVG and trips strict CSP / Trusted Types.
+- **Idempotency stamp doubles as the loop breaker:** re-seeing our own DOM writes is a
+  cheap no-op, so the observer needs no disconnect/reconnect dance. Bursts collapse into
+  one `requestAnimationFrame`-scheduled sweep.
+- **Diagnostics:** `[spinner] themed N glyph(s) (X re-themed, Y new)` on an apply,
+  `[spinner] restored N glyph(s) to Claude's own` on a revert. A sudden `0` means the
+  logo geometry drifted, not that the feature is gone.
+
+### Driving it from the DevTools console
+
+Everything above is reachable live, which is how a new shape gets iterated without a
+rebuild: define `window.__CDB_SPINNER_SPEC` and paste the file (section 7's checklist),
+then call `__cdbSpinnerApply` with successive specs. See
+[SPINNER_SHAPES.md](SPINNER_SHAPES.md#how-to-swap-or-test-a-shape-live-no-rebuild) for the
+step-by-step recipe.
 
 ---
 
 ## 7. Risks & live-test checklist
 
-This is inherently fragile (remote-rendered, minified, version-sensitive) and **must be
-tested iteratively in the running app by the user** - this repo does not auto-build or
-auto-install, and a single-instance lock means the user runs the patched build and
-reports back. There is no way to validate the match from the bundle alone.
+The runtime match is inherently fragile (remote-rendered, version-sensitive) and cannot be
+validated from the bundle alone, so it is checked in the running app. Three suites cover
+the parts that are checkable offline - `scripts/test-spinner-main.mjs` (what a switch
+pushes into each window), `scripts/test-spinner-dom.mjs` (re-theme, revert and the flip
+frames in headless Chromium) and `scripts/test-picker-gaming.mjs` (the picker's sections);
+`scripts/validate-patches.sh` runs all three.
 
 ### Risks
 
-- **`PATH_SIGNATURE` drift.** If Anthropic re-exports the logo geometry, the prefix
-  stops matching and `matched 0` appears in the console. Mitigation: the `match` field
-  lets a theme override the signature without a rebuild; the console diagnostic makes
-  the failure visible.
+- **Star-signature drift.** If Anthropic re-exports the logo geometry past all three
+  fragments, nothing matches and `themed 0` appears in the console. Mitigation: the
+  `match` field lets a theme override the signature set without a rebuild; the console
+  diagnostic makes the failure visible.
 - **Over-matching.** If the star path is reused by an icon we did *not* want to change
   (e.g. a tiny inline logo in a menu), it'll be swapped too. The `viewBox 0 0 100 100`
   pre-filter plus the very specific path signature make collateral hits unlikely, but
@@ -466,52 +480,67 @@ reports back. There is no way to validate the match from the bundle alone.
 - **CSP / Trusted Types.** We use `createElementNS` + `setAttribute` (not `innerHTML`),
   which is allowed under strict CSP; do **not** switch to `innerHTML` for SVG.
 - **Animation conflict.** Theme `animation` + claude.ai's own animation on overlapping
-  elements can clash; default `animation: null` avoids this.
+  elements can clash; `animation: null` avoids this.
+- **Cloned glyphs.** A glyph element the SPA cloned from one we already reshaped has our
+  children, not the star's. The document-wide fallback capture is what lets those be
+  restored on revert; without it a revert would leave our shape behind on those nodes.
 
 ### Live-test checklist (user runs the patched build)
 
-1. **Greeting glyph replaced** - the "Good afternoon, Patrick" header icon shows the
-   mushroom, not the star.
+1. **Greeting glyph replaced** - the greeting header icon shows the theme's shape, not the
+   star.
 2. **Thinking/loading spinner replaced** - start a message; the in-progress spinner
-   shows the mushroom (and animates, whether via claude.ai's motion or `SPEC.animation`).
+   shows the shape (and animates, whether via claude.ai's motion or `SPEC.animation`).
 3. **App logo NOT broken** - any window-chrome / titlebar / sidebar brand logo is either
    intentionally changed *consistently* or left intact; confirm nothing is blank or
    mis-sized. (If the logo uses the same path+viewBox and you want it left alone, tighten
    the matcher with an ancestor check - but default is "replace all brand glyphs".)
 4. **Color follows theme accent** - single-color/`currentColor` paths render in the
-   theme's `--accent-brand`; explicit-fill paths (red cap etc.) render as specified.
+   theme's `--accent-brand`; explicit-fill paths (the mushroom cap, the dragon ball)
+   render as specified.
 5. **No console errors** - open the webview DevTools console; expect only
-   `[spinner] matched N glyph(s)` lines, no exceptions, no Trusted-Types violations.
+   `[spinner] themed N glyph(s)` lines, no exceptions, no Trusted-Types violations.
 6. **SPA navigation keeps working** - navigate between chats/Projects/settings and back;
    newly rendered greeting/spinner instances still get replaced (observer working), and
    navigation itself is unaffected (no freeze from the observer).
 7. **Idempotency** - leave the app open through several re-renders; confirm no runaway
    CPU (observer not looping) and the glyph doesn't flicker between shapes.
-8. **Theme switch** - change the active theme's spinner and relaunch; the new shape
-   appears (version stamp forces re-process).
+8. **Theme switch is live** - switch themes from the picker or Settings -> Extra -> Themes
+   without relaunching: the glyph takes the new shape (and the new animation) in every
+   open window immediately. Switch to a theme with a `flip` shape and confirm the
+   two-frame cut, then back.
+9. **Revert is clean** - pick **Claude default**: the star comes back in every window, and
+   the console reports `restored N glyph(s) to Claude's own`. Then pick a theme again -
+   the shape must return, proving the restore did not break the matcher.
 
 ### How to iterate fast without rebuilding
 
-Paste section 6's IIFE into the **webview DevTools console** (right-click ->
+Paste `js/spinner_injector.js` into the **webview DevTools console** (right-click ->
 Inspect on the claude.ai view, or the app's devtools) after defining
 `window.__CDB_SPINNER_SPEC = { ...the spinner object... }`. This validates the matcher
-and shape live before committing it to the patch. Use `window.__cdbSpinner.sweep(document)`
-to re-run manually and `window.__cdbSpinner.disconnect()` to stop the observer.
+and shape live before committing it to the patch. After that, `__cdbSpinnerApply(spec)`
+swaps shapes without re-pasting, `window.__cdbSpinner.sweep(document)` re-runs the
+matcher, `window.__cdbSpinner.managed()` reports how many glyphs the engine owns, and
+`window.__cdbSpinner.disconnect()` stops the observer.
 
 ---
 
-## 8. Implementation outline (when we build it)
+## 8. How it was built
 
-- **Where:** extend `add_feature_custom_themes.nim` (it already owns the
-  `web-contents-created`/`dom-ready` injection and reads `claude-desktop-bin.json`).
-  Add the spinner installer JS as a second `staticRead`-style snippet in `js/` and have
-  the Nim build serialize `cfg.themes[active].spinner` (or a top-level `cfg.spinner`) to
-  JSON, concatenated as `var __CDB_SPINNER_SPEC = <json>;` ahead of the IIFE.
-- **Keyframes:** append the section-4 CSS to `__cdb_css` so it ships via `insertCSS`.
-- **Guard:** the IIFE is self-guarding (returns on falsy/empty spec, stamps nodes), so a
-  second `executeJavaScript` on reload is safe. Match the existing patch's idempotency
-  philosophy: any "already applied" assertion must check the **end state** (e.g. spec
-  baked in), per the repo's Rule 6 - do not key off the absence of the star.
+- **Where:** `patches/add_feature_custom_themes.nim` owns it - the same patch that owns
+  the `web-contents-created`/`dom-ready` injection and reads `claude-desktop-bin.jsonc`.
+  It `staticRead`s `js/spinner_injector.js` and serializes the active theme's `spinner`
+  to JSON, prepended as `var __CDB_SPINNER_SPEC = <json|null>;`.
+- **Live channel:** the same payload is re-evaluated in every open window on a theme
+  switch, so the engine's `apply()` does the re-theme. Nothing about a theme switch needs
+  a restart.
+- **Keyframes:** the section-4 CSS is appended to `__cdb_css` and ships via `insertCSS` -
+  all five animation names for every theme, so a switch can never land on a shape whose
+  animation has no keyframes.
+- **Guard:** the file installs the engine only if it is not already installed, and
+  validates every spec before touching the DOM, so a re-run or a malformed spec is safe.
+  The build-time `validateSpinner` assertions (section 3) are the strict half: a bundled
+  spec that violates the contract fails the build rather than shipping.
 - **Break risk:** LOW-MEDIUM. No regex on the local bundle (so the *patch* won't fail to
   apply on upstream bumps), but the **runtime match** depends on remote geometry; that
   risk is surfaced via the console diagnostic, not a build failure.
