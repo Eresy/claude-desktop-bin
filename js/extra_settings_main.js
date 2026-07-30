@@ -157,7 +157,10 @@
   // The .jsonc is a human-owned file with an auto-created template; it already
   // has two writers (template creation + activeTheme persistence) and this page
   // deliberately does not become a third. Writes are atomic (tmp + rename).
-  function __cdbEx_writeOverrides(mutate) {
+  // mutate() receives the whole parsed .json object and may return a value that
+  // is handed back to the caller as `extra`. Both writers below funnel through
+  // here so there is still exactly one place that rewrites the .json.
+  function __cdbEx_writeCfg(mutate) {
     var p = __cdbEx_paths();
     var raw = null;
     try {
@@ -184,11 +187,7 @@
         } catch (e3) {}
       }
     }
-    var o = cfg.growthbookOverrides;
-    if (!o || typeof o !== "object" || Array.isArray(o)) o = {};
-    mutate(o);
-    if (Object.keys(o).length) cfg.growthbookOverrides = o;
-    else delete cfg.growthbookOverrides;
+    var extra = mutate(cfg);
 
     var tmp = p.json + ".cdb-tmp";
     try {
@@ -198,7 +197,20 @@
       try { _fs.unlinkSync(tmp); } catch (e5) {}
       return { ok: false, error: "cannot write " + p.json + ": " + e4.message };
     }
-    return { ok: true, overridesJson: o, path: p.json };
+    return { ok: true, extra: extra, path: p.json };
+  }
+
+  function __cdbEx_writeOverrides(mutate) {
+    var res = __cdbEx_writeCfg(function (cfg) {
+      var o = cfg.growthbookOverrides;
+      if (!o || typeof o !== "object" || Array.isArray(o)) o = {};
+      mutate(o);
+      if (Object.keys(o).length) cfg.growthbookOverrides = o;
+      else delete cfg.growthbookOverrides;
+      return o;
+    });
+    if (!res.ok) return res;
+    return { ok: true, overridesJson: res.extra, path: res.path };
   }
 
   function __cdbEx_readFileOverrides(file) {
@@ -212,6 +224,20 @@
       if (o && typeof o === "object" && !Array.isArray(o)) return o;
     } catch (e2) {}
     return {};
+  }
+
+  // One top-level key out of a .json/.jsonc file, or undefined. Used to detect a
+  // hand-edited value that would win the startup merge over anything we write.
+  function __cdbEx_readFileKey(file, key) {
+    var raw;
+    try {
+      raw = _fs.readFileSync(file, "utf8");
+    } catch (e) { return undefined; }
+    try {
+      var cfg = JSON.parse(__cdbEx_strip(raw) || "{}");
+      if (cfg && typeof cfg === "object" && !Array.isArray(cfg)) return cfg[key];
+    } catch (e2) {}
+    return undefined;
   }
 
   // An id may only be written if the catalog knows it (or we force it on Linux
@@ -294,6 +320,40 @@
 
     "cdb-extra:paths": function () {
       return { ok: true, paths: __cdbEx_paths() };
+    },
+
+    // Cowork glow. The live half lives in patches/add_feature_cowork_glow.nim
+    // (globalThis.__cdbCoworkGlow); persistence is ours because this file is the
+    // single writer of the .json.
+    "cdb-glow:read": function () {
+      var g = globalThis.__cdbCoworkGlow;
+      if (!g) return { ok: false, error: "the Cowork glow patch is not installed in this build" };
+      var s = g.read();
+      var jsonc = __cdbEx_readFileKey(__cdbEx_paths().jsonc, "coworkGlow");
+      return {
+        ok: true,
+        mode: s.mode,
+        opacity: s.opacity,
+        defaultOpacity: s.defaultOpacity,
+        // A hand-edited .jsonc wins the per-key merge at startup, so the switch
+        // must show itself as locked rather than silently disagree with the file.
+        lockedByJsonc: jsonc === "pulse" || jsonc === "calm" ? jsonc : null
+      };
+    },
+
+    "cdb-glow:set": function (mode) {
+      var g = globalThis.__cdbCoworkGlow;
+      if (!g) return { ok: false, error: "the Cowork glow patch is not installed in this build" };
+      if (mode !== "pulse" && mode !== "calm") return { ok: false, error: "mode must be \"pulse\" or \"calm\"" };
+      var live = g.set(mode);
+      if (!live || live.ok !== true) return live || { ok: false, error: "could not apply the glow mode" };
+      var res = __cdbEx_writeCfg(function (cfg) {
+        if (mode === "calm") cfg.coworkGlow = "calm";
+        else delete cfg.coworkGlow;
+        return mode;
+      });
+      if (!res.ok) return { ok: false, error: "applied to " + live.windows + " window(s) but could not save: " + res.error };
+      return { ok: true, mode: mode, windows: live.windows, path: res.path };
     },
 
     "cdb-flags:catalog": function () {

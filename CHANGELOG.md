@@ -37,6 +37,23 @@ The cause is how narrow claude.ai's own test is. Its transcript scroller decides
 This markup belongs to the remote claude.ai SPA rather than to the bundle we patch, so a claude.ai deploy can rename the anchors it keys on. It fails soft when that happens: the sweep finds nothing and the view behaves exactly as it does today.
 
 Contributed by [@Felitendo](https://github.com/Felitendo) ([#209](https://github.com/patrickjaja/claude-desktop-bin/pull/209)) - thanks!
+### The pulsing Cowork glow can be held still, for laptops and weak GPUs
+
+The glow behind the Cowork hero never sits still. Its element carries `.cowork-hero-glow`, and claude.ai gives that class a single declaration - `animation: 3.2s ease-in-out infinite cowork-hero-glow-pulse`, whose keyframes swing opacity between 55% and 100%.
+
+`infinite` is the part that matters on a laptop. The animation never ends, so for as long as a Cowork view is open the compositor is handed work every frame and the display pipeline never gets to idle - battery spent on decoration. An opacity animation is cheap while it is GPU-composited, but this is Linux, and our own launcher falls back to `--disable-gpu-compositing` on software/llvmpipe setups and to `--disable-gpu` outright when the GPU is blocklisted. In those configurations the glow is redrawn on the CPU for every one of those frames. Upstream's only escape hatch is `prefers-reduced-motion: reduce`, an OS-wide switch that flattens every other animation in the app along with it.
+
+The **Features** panel under Settings -> Extra now leads with a **Motion** switch that holds the glow still. The interesting part is what "still" has to mean: that class carries *nothing but* the animation, because the gradient and blur come from utilities on the same element. Setting `animation: none` on its own would therefore leave the glow parked at its own opacity - brighter than the pulse's average, not calmer. So the switch pins both, holding it at a fixed opacity that defaults to `0.55`, the dim end of upstream's own range.
+
+No frame-time or power figure is claimed for this: the reasoning is the mechanism above, not a benchmark.
+
+It is applied with `webContents.insertCSS` and removed again with `removeInsertedCSS`, so flipping it takes effect immediately in every open window and needs no restart. The choice is saved as `coworkGlow` in `claude-desktop-extra.json`; `coworkGlowOpacity` sets the fixed opacity if `0.55` is not to your taste. Setting `coworkGlow` by hand in the `.jsonc` still wins the startup merge, and the switch then shows itself as locked rather than silently disagreeing with the file.
+
+The same stylesheet also defines an `animate-[conway-pulse-glow_2s_ease-in-out_infinite]` utility that looks related, but `@keyframes conway-pulse-glow` is not defined anywhere in the shipped CSS, so it animates nothing and is deliberately left alone.
+
+As with anything keyed to remote claude.ai markup, a claude.ai deploy can rename the selector. It fails soft: the CSS matches nothing and the glow keeps pulsing exactly as it does today.
+
+## 2026-07-29
 
 ### 84 community color palettes now ship with the package
 

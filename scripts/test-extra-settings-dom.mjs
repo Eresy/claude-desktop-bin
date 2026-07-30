@@ -216,10 +216,38 @@ async function type(value) {
   await sleep(30);
 }
 
+// The Cowork glow switch lives in Features, above the GrowthBook description and
+// the restart notice - it is ours and it applies live.
+async function featuresPanel(featuresItem) {
+  featuresItem.click();
+  await sleep(120);
+  const panel = document.querySelector(".cdbx-panel");
+  ok(!!panel, "the Features panel is mounted");
+  const glow = panel && panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']");
+  ok(!!glow, "the Cowork glow switch renders in the Features panel");
+  if (!glow) return;
+  ok(glow.getAttribute("aria-checked") === "false", "the glow switch reflects mode 'pulse'");
+  ok(!glow.disabled, "the glow switch is enabled when the .jsonc does not set it");
+
+  // It must sit ahead of the restart notice, which speaks only for the flags.
+  const notice = panel.querySelector(".cdbx-notice");
+  if (notice) {
+    const row = glow.closest(".cdbx-row");
+    ok(!!(row.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING),
+       "the glow row precedes the restart notice");
+  }
+
+  glow.click();
+  await sleep(60);
+  ok(glow.getAttribute("aria-checked") === "true", "clicking the glow switch turns it on");
+}
+
 async function themesPanel(themesItem) {
   themesItem.click();
   await sleep(80);
   ok(!!document.querySelector(".cdbx-sections"), "the Themes panel renders sections");
+  ok(!document.querySelector(".cdbx-panel .cdbx-switch[aria-label='calm the Cowork glow']"),
+     "the Cowork glow switch is NOT in the Themes panel");
 
   const secs = sections();
   ok(labels() === "Your themes:1 | Gaming:3 | Built-in:2 | Community:3 | More:1",
@@ -524,7 +552,10 @@ async function run() {
     ok(!diags.some(function (d) { return d.indexOf("carries no") >= 0; }),
        "no icon complaint for a nav that has icon boxes");
 
-    if (kind === "real") await themesPanel(items[0]);
+    if (kind === "real") {
+      await themesPanel(items[0]);
+      await featuresPanel(items[1]);
+    }
     return;
   }
 
@@ -685,6 +716,8 @@ window.cdbExtra = {
   flagsSet: stub({ ok: true }),
   flagsUnset: stub({ ok: true }),
   appRelaunch: stub({ ok: true }),
+  glowRead: stub({ ok: true, mode: "pulse", opacity: 0.55, defaultOpacity: 0.55, lockedByJsonc: null }),
+  glowSet: stub({ ok: true, mode: "calm", windows: 1, path: "/tmp/x.json" }),
   paths: stub({ ok: true, paths: {} }),
   diag: function (m) { diags.push(String(m)); return Promise.resolve({ ok: true }); }
 };
