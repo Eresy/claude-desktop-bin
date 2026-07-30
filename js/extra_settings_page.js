@@ -794,12 +794,10 @@
     var node = el("div", "cdbx-row");
     var main = el("div", "cdbx-row-main");
     main.appendChild(el("div", "cdbx-id", "Calm the Cowork glow"));
+    // Keep this short: the mechanism and the GPU reasoning belong in the README
+    // and the patch header, not in front of the user.
     main.appendChild(el("div", "cdbx-note",
-      "For laptops and machines without much graphics power. The glow behind the Cowork hero " +
-      "pulses between 55% and 100% opacity every 3.2 s and never stops, so the compositor never " +
-      "settles - and where this build falls back to software rendering (--disable-gpu-compositing " +
-      "or --disable-gpu) it is redrawn on the CPU for every one of those frames. " +
-      "Switch this on to hold the glow still at a fixed, dimmer opacity. Applies live, no restart."));
+      "Stops the Cowork hero glow from pulsing and dims it. Easier on laptops and weak GPUs. Applies live."));
     var stateLine = el("div", "cdbx-state", "Loading...");
     main.appendChild(stateLine);
     node.appendChild(main);
