@@ -47,7 +47,7 @@ The **Features** panel under Settings -> Extra now leads with a **Motion** switc
 
 No frame-time or power figure is claimed for this: the reasoning is the mechanism above, not a benchmark.
 
-It is applied with `webContents.insertCSS` and removed again with `removeInsertedCSS`, so flipping it takes effect immediately in every open window and needs no restart. The choice is saved as `coworkGlow` in `claude-desktop-bin.json`; `coworkGlowOpacity` sets the fixed opacity if `0.55` is not to your taste. Setting `coworkGlow` by hand in the `.jsonc` still wins the startup merge, and the switch then shows itself as locked rather than silently disagreeing with the file.
+It is applied with `webContents.insertCSS` and removed again with `removeInsertedCSS`, so flipping it takes effect immediately in every open window and needs no restart. The choice is saved as `coworkGlow` in `claude-desktop-extra.json`; `coworkGlowOpacity` sets the fixed opacity if `0.55` is not to your taste. Setting `coworkGlow` by hand in the `.jsonc` still wins the startup merge, and the switch then shows itself as locked rather than silently disagreeing with the file.
 
 The same stylesheet also defines an `animate-[conway-pulse-glow_2s_ease-in-out_infinite]` utility that looks related, but `@keyframes conway-pulse-glow` is not defined anywhere in the shipped CSS, so it animates nothing and is deliberately left alone.
 

@@ -66,11 +66,21 @@ return s.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,function(m,q
 function __cdbG_read(p){
 try{var r=_fs.readFileSync(p,"utf8");return JSON.parse(__cdbG_strip(r))}catch(e){return null}
 }
+// New name first, legacy name as a fallback: the one-time
+// claude-desktop-bin -> -extra migration lives in the custom-themes patch
+// (globalThis.__cdbCfgMigrate) and same-anchor prefix injections stack in
+// reverse, so it may not have run yet when this does. Reading both makes the
+// order moot instead of losing a pre-rename config on the first launch.
+function __cdbG_pick(d,newName,oldName){
+var v=__cdbG_read(_path.join(d,newName));
+return v!==null?v:__cdbG_read(_path.join(d,oldName));
+}
 // .json then .jsonc, .jsonc wins - the same precedence the theme engine uses.
 function __cdbG_cfg(){
+try{(globalThis.__cdbCfgMigrate||function(){})()}catch(e){}
 var d=_app.getPath("userData"),out={};
-var a=__cdbG_read(_path.join(d,"claude-desktop-bin.json"));
-var b=__cdbG_read(_path.join(d,"claude-desktop-bin.jsonc"));
+var a=__cdbG_pick(d,"claude-desktop-extra.json","claude-desktop-bin.json");
+var b=__cdbG_pick(d,"claude-desktop-extra.jsonc","claude-desktop-bin.jsonc");
 var k;
 if(a&&typeof a==="object")for(k in a)out[k]=a[k];
 if(b&&typeof b==="object")for(k in b)out[k]=b[k];
