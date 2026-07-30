@@ -32,6 +32,22 @@
 // file first.
 {
   // "activeTheme": "mario",
+
+  // coworkGlow: for laptops and machines without much graphics power. The glow
+  // behind the Cowork hero pulses between 55% and 100% opacity every 3.2s and
+  // never stops, so the compositor never settles - and where the launcher falls
+  // back to software rendering (--disable-gpu-compositing / --disable-gpu) those
+  // frames are redrawn on the CPU. "calm" stops the pulse and holds the glow at a
+  // fixed opacity; omit it (or "pulse") for claude.ai's own behaviour.
+  // Settings -> Extra -> Features has a switch for this and applies it live; a
+  // value set HERE wins the merge, so that switch shows itself as locked while
+  // this line is active.
+  // "coworkGlow": "calm",
+
+  // coworkGlowOpacity: the fixed opacity "calm" holds, 0..1 (default 0.55, the
+  // dim end of upstream's own pulse). Hand edits need a restart.
+  // "coworkGlowOpacity": 0.55,
+
   "growthbookOverrides": {
     // "17519066": true,     // external-browser URL block
     // "66187241": true,     // CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES for local-agent sessions

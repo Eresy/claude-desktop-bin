@@ -777,6 +777,93 @@
     return (entry.displayName || entry.name || "").toLowerCase();
   }
 
+  // --- motion: the pulsing Cowork glow ------------------------------------
+  // Sits at the top of the Themes panel rather than in its own nav entry, so it
+  // is reachable without scrolling past ~97 theme cards.
+  function renderGlowRow(panel) {
+    // The bridge half of this switch lives in the mainView preload. If an older
+    // preload is in place (a partially updated install), skip the row instead of
+    // throwing and taking the whole Themes panel down with it.
+    if (!api || typeof api.glowRead !== "function" || typeof api.glowSet !== "function") return;
+
+    var head = el("div", "cdbx-sec-h");
+    head.appendChild(el("span", "cdbx-sec-t", "Motion"));
+    panel.appendChild(head);
+
+    var host = el("div", "cdbx-list");
+    var node = el("div", "cdbx-row");
+    var main = el("div", "cdbx-row-main");
+    main.appendChild(el("div", "cdbx-id", "Calm the Cowork glow"));
+    main.appendChild(el("div", "cdbx-note",
+      "For laptops and machines without much graphics power. The glow behind the Cowork hero " +
+      "pulses between 55% and 100% opacity every 3.2 s and never stops, so the compositor never " +
+      "settles - and where this build falls back to software rendering (--disable-gpu-compositing " +
+      "or --disable-gpu) it is redrawn on the CPU for every one of those frames. " +
+      "Switch this on to hold the glow still at a fixed, dimmer opacity. Applies live, no restart."));
+    var stateLine = el("div", "cdbx-state", "Loading...");
+    main.appendChild(stateLine);
+    node.appendChild(main);
+
+    var aside = el("div", "cdbx-row-aside");
+    node.appendChild(aside);
+    var toggle = el("button", "cdbx-switch");
+    toggle.type = "button";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", "false");
+    toggle.setAttribute("aria-label", "calm the Cowork glow");
+    toggle.disabled = true;
+    aside.appendChild(toggle);
+
+    host.appendChild(node);
+    panel.appendChild(host);
+
+    api.glowRead().then(function (res) {
+      if (failed(res)) {
+        stateLine.textContent = "Unavailable: " + reason(res);
+        return;
+      }
+      var pct = Math.round((res.opacity || 0) * 100);
+      function describe() {
+        return toggle.getAttribute("aria-checked") === "true"
+          ? "calm - static at " + pct + "% opacity"
+          : "pulsing (claude.ai default)";
+      }
+      toggle.setAttribute("aria-checked", res.mode === "calm" ? "true" : "false");
+
+      // A hand-edited .jsonc wins the startup merge, so the switch must not
+      // pretend it can override it.
+      if (res.lockedByJsonc) {
+        toggle.title = "Edit claude-desktop-bin.jsonc to change this";
+        stateLine.textContent = describe() + " - set in claude-desktop-bin.jsonc";
+        return;
+      }
+
+      toggle.disabled = false;
+      stateLine.textContent = describe();
+      toggle.addEventListener("click", function () {
+        if (toggle.disabled) return;
+        var next = toggle.getAttribute("aria-checked") !== "true";
+        toggle.disabled = true;
+        api.glowSet(next ? "calm" : "pulse").then(function (r) {
+          toggle.disabled = false;
+          if (failed(r)) { toast("Could not change the glow: " + reason(r), true); return; }
+          toggle.setAttribute("aria-checked", next ? "true" : "false");
+          stateLine.textContent = describe();
+          node.classList.add("cdbx-flash");
+          setTimeout(function () { node.classList.remove("cdbx-flash"); }, 700);
+          toast(next
+            ? "Cowork glow calmed in " + r.windows + " window(s)"
+            : "Cowork glow restored to pulsing");
+        }, function (err) {
+          toggle.disabled = false;
+          toast("Could not change the glow: " + (err && err.message ? err.message : String(err)), true);
+        });
+      });
+    }, function (err) {
+      stateLine.textContent = "Unavailable: " + (err && err.message ? err.message : String(err));
+    });
+  }
+
   function renderThemes(panel) {
     clear(panel);
     panel.appendChild(el("div", "cdbx-h1", "Themes"));
@@ -899,6 +986,11 @@
   function renderFeatures(panel) {
     clear(panel);
     panel.appendChild(el("div", "cdbx-h1", "Features"));
+
+    // Ours, and it applies live - so it goes above the GrowthBook description
+    // and the restart notice, both of which only speak for the flag list.
+    renderGlowRow(panel);
+
     panel.appendChild(el("div", "cdbx-sub",
       "Anthropic's GrowthBook feature flags, as observed being read by this build. " +
       "Flags already on for your account are switched on below; turning one off writes an explicit override."));

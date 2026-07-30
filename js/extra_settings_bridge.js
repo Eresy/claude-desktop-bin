@@ -55,6 +55,16 @@
       return ipcRenderer.invoke("cdb-flags:unset", id);
     },
 
+    // Cowork glow. set() takes only the fixed strings "pulse"/"calm"; the main
+    // side re-validates and rejects anything else, so the page cannot smuggle a
+    // stylesheet or an arbitrary opacity through here.
+    glowRead: function () {
+      return ipcRenderer.invoke("cdb-glow:read");
+    },
+    glowSet: function (mode) {
+      return ipcRenderer.invoke("cdb-glow:set", String(mode));
+    },
+
     // Resolved config file paths, shown in both panels.
     paths: function () {
       return ipcRenderer.invoke("cdb-extra:paths");
