@@ -2531,6 +2531,8 @@ jobs:
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
           VERSION: ${{ needs.check-version.outputs.version }}
           PKGREL: ${{ needs.check-version.outputs.pkgrel }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "$AUR_USERNAME"
           git config --global user.email "$AUR_EMAIL"
@@ -2538,11 +2540,18 @@ jobs:
           git clone ssh://aur@aur.archlinux.org/claude-desktop-extra.git aur-repo
 
           # PKGBUILD's install= points at claude-desktop-extra.install; ship
-          # it so users' makepkg finds it. All three files are staged in
-          # release-files/ by the Organize step (and were published as
-          # release assets by the same job, so they cannot drift).
-          cp release-files/PKGBUILD release-files/.SRCINFO \
-             release-files/claude-desktop-extra.install aur-repo/
+          # it so users' makepkg finds it. Download the three files from the
+          # release published earlier in this job: local staging dirs
+          # (release-files/, artifacts/) are wiped by the git clean in the
+          # README/nix commit steps above, and pulling from the release
+          # guarantees the AUR content matches the published assets exactly.
+          # (GitHub stores .SRCINFO as the asset name default.SRCINFO.)
+          mkdir -p aur-src
+          gh release download "$TAG" --dir aur-src --clobber \
+            -p PKGBUILD -p default.SRCINFO -p claude-desktop-extra.install
+          cp aur-src/PKGBUILD aur-repo/PKGBUILD
+          cp aur-src/default.SRCINFO aur-repo/.SRCINFO
+          cp aur-src/claude-desktop-extra.install aur-repo/claude-desktop-extra.install
 
           cd aur-repo
           git add PKGBUILD .SRCINFO claude-desktop-extra.install
@@ -2555,7 +2564,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf release-files artifacts pacman-repo pacman-in /tmp/pacman-gpg aur-repo ~/.ssh/aur
+          rm -rf release-files artifacts pacman-repo pacman-in /tmp/pacman-gpg aur-repo aur-src ~/.ssh/aur
 
   # ================================================================
   # RPM Repository — runs on Fedora for native rpm-sign support
