@@ -498,7 +498,7 @@
     <div class="terminal-body" id="hero-terminal">
       <div><span class="terminal-comment"># install in one command</span></div>
       <div><span class="terminal-prompt">$</span> <span class="terminal-cmd" id="hero-cmd">curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash</span></div>
-      <div><span class="terminal-prompt">$</span> <span class="terminal-cmd">sudo pacman -Syu claude-desktop-bin</span><span class="cursor"></span></div>
+      <div><span class="terminal-prompt">$</span> <span class="terminal-cmd">sudo pacman -Syu claude-desktop-extra</span><span class="cursor"></span></div>
     </div>
   </div>
 
@@ -528,11 +528,11 @@
   <div class="tab-panel active" id="tab-arch">
     <div class="install-block">
       <button class="copy-btn" data-copy="curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
-sudo pacman -Syu claude-desktop-bin">Copy</button>
+sudo pacman -Syu claude-desktop-extra">Copy</button>
       <pre><span class="comment"># Add repo + GPG key</span>
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
 <span class="comment"># Install</span>
-sudo pacman -Syu claude-desktop-bin</pre>
+sudo pacman -Syu claude-desktop-extra</pre>
     </div>
     <div class="install-note">Updates arrive through <code>pacman -Syu</code> (or <code>yay -Syu</code>). Signed packages, x86_64 and aarch64. <a href="https://github.com/patrickjaja/claude-desktop-bin#arch-linux--manjaro-pacman-repository">Manual setup and <code>makepkg</code> build →</a></div>
   </div>
@@ -540,11 +540,11 @@ sudo pacman -Syu claude-desktop-bin</pre>
   <div class="tab-panel" id="tab-debian">
     <div class="install-block">
       <button class="copy-btn" data-copy="curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
-sudo apt install claude-desktop-bin">Copy</button>
+sudo apt install claude-desktop-extra">Copy</button>
       <pre><span class="comment"># Add repo + GPG key</span>
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
 <span class="comment"># Install</span>
-sudo apt install claude-desktop-bin</pre>
+sudo apt install claude-desktop-extra</pre>
     </div>
     <div class="install-note">Updates arrive through <code>apt update && apt upgrade</code>. Supports amd64 and arm64.</div>
   </div>
@@ -552,11 +552,11 @@ sudo apt install claude-desktop-bin</pre>
   <div class="tab-panel" id="tab-fedora">
     <div class="install-block">
       <button class="copy-btn" data-copy="curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
-sudo dnf install claude-desktop-bin">Copy</button>
+sudo dnf install claude-desktop-extra">Copy</button>
       <pre><span class="comment"># Add repo + GPG key</span>
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
 <span class="comment"># Install</span>
-sudo dnf install claude-desktop-bin</pre>
+sudo dnf install claude-desktop-extra</pre>
     </div>
     <div class="install-note">Updates arrive through <code>dnf upgrade</code>. Supports x86_64 and aarch64.</div>
   </div>
@@ -899,9 +899,9 @@ chmod +x Claude_Desktop-x86_64.AppImage
 <script>
   // Distro-specific hero commands and install tab mapping
   var distroCommands = {
-    arch:    'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash\nsudo pacman -Syu claude-desktop-bin',
-    debian:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash\nsudo apt install claude-desktop-bin',
-    fedora:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash\nsudo dnf install claude-desktop-bin',
+    arch:    'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash\nsudo pacman -Syu claude-desktop-extra',
+    debian:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash\nsudo apt install claude-desktop-extra',
+    fedora:  'curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash\nsudo dnf install claude-desktop-extra',
     nix:     'nix run github:patrickjaja/claude-desktop-bin',
     appimage:'wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/Claude_Desktop-x86_64.AppImage\nchmod +x Claude_Desktop-x86_64.AppImage\n./Claude_Desktop-x86_64.AppImage'
   };

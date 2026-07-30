@@ -328,6 +328,7 @@ if [[ -z "$ELECTRON_BIN" ]]; then
     fi
     candidates+=(
         "/usr/lib/claude-desktop/${APP_ID}"
+        # Legacy path: Arch installs before the claude-desktop-extra rename.
         "/usr/lib/claude-desktop-bin/${APP_ID}"
     )
     for candidate in "${candidates[@]}"; do
@@ -522,6 +523,8 @@ _mirror_profile_siblings() {
 # Resolve the canonical (system-installed) Electron binary, ignoring any
 # per-profile copy. Mirrors the path-discovery candidate list. Returns the
 # first executable hit on stdout, or empty if none found.
+# (The claude-desktop-bin path is legacy: Arch installs before the
+# claude-desktop-extra rename.)
 _canonical_electron_bin() {
     local c
     for c in \
@@ -539,7 +542,7 @@ _canonical_electron_bin() {
 # At every launch under a named profile, repair the per-profile install if it
 # has gone stale. Triggers:
 #   - Canonical binary newer than per-profile copy (package upgrade refreshed
-#     /usr/lib/claude-desktop-bin/<APP_ID> while ~/.local/lib still points
+#     /usr/lib/claude-desktop/<APP_ID> while ~/.local/lib still points
 #     at the old version → version mismatch with app.asar at runtime).
 #   - Per-profile binary present but no longer executable (e.g. NixOS rebuild
 #     replaced the store path; symlinks pointing into /nix/store dangle).
@@ -1074,7 +1077,14 @@ _diagnose() {
     echo '--- Computer Use ---'
     # The package version pins every bundled bit (bridges, Electron, app.asar).
     local _cu_pkg _cu_res _cu_b _cu_sum=''
-    _cu_pkg="$(pacman -Q claude-desktop-bin 2>/dev/null || dpkg-query -W -f='claude-desktop-bin ${Version}\n' claude-desktop-bin 2>/dev/null || rpm -q claude-desktop-bin 2>/dev/null || echo '(no system package: AppImage/Nix/manual)')"
+    # New package name first; claude-desktop-bin covers pre-rename installs.
+    _cu_pkg="$(pacman -Q claude-desktop-extra 2>/dev/null \
+        || pacman -Q claude-desktop-bin 2>/dev/null \
+        || dpkg-query -W -f='claude-desktop-extra ${Version}\n' claude-desktop-extra 2>/dev/null \
+        || dpkg-query -W -f='claude-desktop-bin ${Version}\n' claude-desktop-bin 2>/dev/null \
+        || rpm -q claude-desktop-extra 2>/dev/null \
+        || rpm -q claude-desktop-bin 2>/dev/null \
+        || echo '(no system package: AppImage/Nix/manual)')"
     echo "package = $_cu_pkg"
     _cu_res="$(dirname "$ELECTRON_BIN")/resources"
     for _cu_b in x11-bridge wlroots-bridge gnome-portal-bridge kwin-portal-bridge; do

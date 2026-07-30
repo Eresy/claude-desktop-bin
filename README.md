@@ -13,7 +13,7 @@
 
 **Anthropic's official Claude Desktop Linux build, repackaged for the distros Anthropic doesn't ship - plus Linux-only extras.**
 
-Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
+Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project - **claude-desktop-extra** - takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
 
 - [**Computer Use**](#computer-use) - desktop automation (screenshot, click, type, scroll, teach mode).
 - [**Custom Themes**](#custom-themes) - 97 bundled dual light/dark palettes (7 built-in, 6 gaming, 84 community), each with its own loading spinner, switchable live from a Ctrl+Shift+T picker, or roll your own.
@@ -58,7 +58,7 @@ Pick your distro below. [Computer Use](#computer-use) works out of the box every
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
 
 # Install (also brings the system up to date, as Arch requires)
-sudo pacman -Syu claude-desktop-bin
+sudo pacman -Syu claude-desktop-extra
 ```
 
 `-Syu` is deliberate: Arch only supports fully-upgraded systems, so installing from a freshly synced repo and upgrading happen in one step. Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
@@ -80,10 +80,10 @@ Also optional: `nodejs` (system MCP servers), `sqlite` (project detection), `cla
 <details>
 <summary>Advanced: manual <code>pacman.conf</code> setup (without the install script)</summary>
 
-The install script only automates these steps. Append to `/etc/pacman.conf` (on aarch64 the section name is `[claude-desktop-bin-aarch64]`; the `Server` line and the package name stay the same):
+The install script only automates these steps. Append to `/etc/pacman.conf` (on aarch64 the section name is `[claude-desktop-extra-aarch64]`; the `Server` line and the package name stay the same):
 
 ```ini
-[claude-desktop-bin]
+[claude-desktop-extra]
 SigLevel = Required DatabaseRequired
 Server = https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
 ```
@@ -91,14 +91,14 @@ Server = https://github.com/patrickjaja/claude-desktop-bin/releases/latest/downl
 Then import the signing key, **verify its fingerprint**, and locally sign it:
 
 ```bash
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc -o /tmp/claude-desktop-bin.asc
-gpg --show-keys --with-fingerprint /tmp/claude-desktop-bin.asc
+curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc -o /tmp/claude-desktop-extra.asc
+gpg --show-keys --with-fingerprint /tmp/claude-desktop-extra.asc
 # Must print: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867 - stop here if it does not.
 
 sudo pacman-key --init            # no-op on a normal Arch install; needed on fresh keyrings, containers and chroots
-sudo pacman-key --add /tmp/claude-desktop-bin.asc
+sudo pacman-key --add /tmp/claude-desktop-extra.asc
 sudo pacman-key --lsign-key 825A7D15D78BABE45646D5DF382409F597908867
-sudo pacman -Syu claude-desktop-bin
+sudo pacman -Syu claude-desktop-extra
 ```
 
 Checking the fingerprint is what makes this trustworthy: it is published in [the README in git](#verifying-the-repository-signing-key), a different channel from the web server serving the key, so a swapped key does not match. Both key steps are required - under `SigLevel = Required` pacman rejects the repo until the key carries your local signature - and `--lsign-key` fails with a cryptic "There is no secret key available to sign with" if the keyring was never initialised, hence the `--init`.
@@ -107,12 +107,12 @@ Checking the fingerprint is what makes this trustworthy: it is published in [the
 <details>
 <summary>Build from source with <code>makepkg</code> (no third-party repository)</summary>
 
-The `PKGBUILD` is generated and CI-tested on every release, and published as a release asset alongside `.SRCINFO` and `claude-desktop-bin.install`:
+The `PKGBUILD` is generated and CI-tested on every release, and published as a release asset alongside `.SRCINFO` and `claude-desktop-extra.install`:
 
 ```bash
-mkdir claude-desktop-bin && cd claude-desktop-bin
+mkdir claude-desktop-extra && cd claude-desktop-extra
 base=https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
-curl -fsSL -O "$base/PKGBUILD" -O "$base/claude-desktop-bin.install"
+curl -fsSL -O "$base/PKGBUILD" -O "$base/claude-desktop-extra.install"
 makepkg -si
 ```
 </details>
@@ -126,7 +126,7 @@ makepkg -si
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
 
 # Install
-sudo apt install claude-desktop-bin
+sudo apt install claude-desktop-extra
 ```
 Updates are automatic via `sudo apt update && sudo apt upgrade`.
 
@@ -143,8 +143,8 @@ sudo apt install qemu-system-x86 ovmf virtiofsd        # arm64: qemu-system-arm 
 <summary>Manual .deb install (without APT repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-bin_1.24012.9-7_amd64.deb
-sudo dpkg -i claude-desktop-bin_*_amd64.deb
+wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-extra_1.24012.9-7_amd64.deb
+sudo dpkg -i claude-desktop-extra_*_amd64.deb
 ```
 </details>
 
@@ -154,7 +154,7 @@ sudo dpkg -i claude-desktop-bin_*_amd64.deb
 curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
 
 # Install
-sudo dnf install claude-desktop-bin
+sudo dnf install claude-desktop-extra
 ```
 Updates are automatic via `sudo dnf upgrade`.
 
@@ -171,8 +171,8 @@ sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd   # arm64: qemu-system-aarc
 <summary>Manual .rpm install (without DNF repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-bin-1.24012.9-7.x86_64.rpm
-sudo dnf install ./claude-desktop-bin-*.x86_64.rpm
+wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-extra-1.24012.9-7.x86_64.rpm
+sudo dnf install ./claude-desktop-extra-*.x86_64.rpm
 ```
 </details>
 
@@ -243,6 +243,15 @@ cd claude-desktop-bin
 
 ARM64 `.deb`, `.rpm`, AppImage, and Nix packages are available for **Raspberry Pi 5**, **NVIDIA DGX Spark** (Ubuntu 24.04 arm64), and **Jetson** (JetPack/Ubuntu 22.04 arm64). The APT and DNF repos serve both x86_64 and arm64 - your package manager picks the correct architecture automatically. Install exactly as above.
 
+### Migrating from claude-desktop-bin
+
+The project was renamed from `claude-desktop-bin` to `claude-desktop-extra`. For almost everyone the switch is automatic:
+
+- **APT / DNF:** nothing to do - the old package is replaced by `claude-desktop-extra` on your next regular upgrade (a transitional package handles apt).
+- **Arch package:** nothing to do - `pacman -Syu` offers to replace `claude-desktop-bin` with `claude-desktop-extra`.
+- **Arch repo section (one-time edit):** the repository database is now named `claude-desktop-extra`. An existing `[claude-desktop-bin]` section in `/etc/pacman.conf` keeps working during the transition, but rename it to `[claude-desktop-extra]` (or `[claude-desktop-extra-aarch64]`) when convenient - the `SigLevel`, `Server` line and signing key stay the same.
+- **Themes / flag overrides:** your `claude-desktop-bin.jsonc` is migrated to `claude-desktop-extra.jsonc` automatically on first launch.
+
 ### Verifying the repository signing key
 
 The APT, DNF and pacman repositories are GPG-signed with the same key. The install scripts import it from GitHub Pages over HTTPS. To verify the key out-of-band, compare its fingerprint against the value published here (this README lives in the git repo, a separate channel from the Pages-hosted key):
@@ -283,11 +292,11 @@ Expect this section to grow - Extra is where the project is heading.
 
 Recolor the whole app - chat, sidebar, Code/Cowork, dialogs, Quick Entry - by overriding CSS variables, injected into every window via Electron's `insertCSS()`. Each theme is **dual light/dark**: it ships a `light` and a `dark` palette, and the app's own toggle (Settings → Appearance) picks the matching one live. Every built-in is contrast-checked (WCAG AA).
 
-**Quick start** - press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> anywhere in the app. A searchable picker opens with every theme available to you, each card showing a dark and a light row of swatches; click one and it applies immediately in every open window, no restart and no config file. Your choice is saved to `claude-desktop-bin.jsonc` with any comments in it left intact. The same list is also in the app's Settings dialog under **Extra → Themes**, next to an **Extra → Features** panel that exposes the [feature flags](#feature-flag-overrides-advanced) as switches.
+**Quick start** - press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> anywhere in the app. A searchable picker opens with every theme available to you, each card showing a dark and a light row of swatches; click one and it applies immediately in every open window, no restart and no config file. Your choice is saved to `claude-desktop-extra.jsonc` with any comments in it left intact. The same list is also in the app's Settings dialog under **Extra → Themes**, next to an **Extra → Features** panel that exposes the [feature flags](#feature-flag-overrides-advanced) as switches.
 
 Prefer the config file? One line is enough, no `themes` block needed:
 ```bash
-echo '{"activeTheme": "mario"}' > ~/.config/Claude/claude-desktop-bin.jsonc
+echo '{"activeTheme": "mario"}' > ~/.config/Claude/claude-desktop-extra.jsonc
 # Restart Claude Desktop, then toggle Settings → Appearance for light/dark
 ```
 
@@ -364,7 +373,7 @@ rm -rf ~/.config/Claude-work ~/.claude-work   # user data is preserved; delete m
 
 ### SSO and URL routing
 
-The `claude://` scheme is registered system-wide and points to the default profile's `.desktop` file. To route SSO callbacks to the profile that started them, claude-desktop-bin uses a marker mechanism ([`fix_profile_url_routing.nim`](patches/fix_profile_url_routing.nim)): when a profile calls `shell.openExternal()` on an auth URL it writes a timestamped marker at `$XDG_RUNTIME_DIR/claude-desktop-pending-auth-<profile>`; when the launcher receives a `claude://` callback with no explicit profile it picks the most recent marker (< 5 min old) and re-execs as that profile.
+The `claude://` scheme is registered system-wide and points to the default profile's `.desktop` file. To route SSO callbacks to the profile that started them, claude-desktop-extra uses a marker mechanism ([`fix_profile_url_routing.nim`](patches/fix_profile_url_routing.nim)): when a profile calls `shell.openExternal()` on an auth URL it writes a timestamped marker at `$XDG_RUNTIME_DIR/claude-desktop-pending-auth-<profile>`; when the launcher receives a `claude://` callback with no explicit profile it picks the most recent marker (< 5 min old) and re-execs as that profile.
 
 Sequential SSO into any number of profiles is reliable. Two edge cases misroute (the "most recent marker wins" rule): clicking an unrelated outbound link mid-flow, or two SSO flows in flight concurrently - just re-attempt. The marker is `0600` and holds only a timestamp. Escape hatch: `claude-desktop --profile=NAME 'claude://<callback-url>'`.
 
@@ -461,10 +470,10 @@ Features the official build doesn't have - either they exist nowhere upstream (t
 | Patch | What it does & why it exists |
 |-------|------------------------------|
 | `add_feature_custom_themes.nim` | CSS theme injection - 97 bundled dual light/dark palettes (7 curated built-ins, 6 gaming, 84 community), each with its own loading spinner, applied to every window via `insertCSS()`. Upstream has no theming layer beyond the light/dark toggle. Also installs the theme registry (`globalThis.__cdbThemes`) the picker below drives and the live spinner engine, so a switch re-themes colors *and* the loading glyph in every open window instead of on the next start |
-| `add_feature_theme_picker.nim` | The <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> [theme picker](themes/README.md#theme-picker-ctrlshiftt) - a searchable gallery of every user, gaming, built-in and community theme, grouped in divider-separated sections, with light/dark swatches per palette. Clicking one applies it live and saves it to `claude-desktop-bin.jsonc`, comments intact. Opens via `before-input-event`, so it needs nothing from the app's own bundle |
-| `add_feature_extra_settings.nim` | The rainbow **Extra** group in the app's own Settings dialog, with a **Themes** panel (every user, gaming, built-in and community palette as a swatch row, in the same sections as the picker - one click applies and saves it live) and a **Features** panel (all 134 catalogued GrowthBook flags as switches, pre-set to what your account actually gets, with value-carrying flags read-only and the Cowork-breaking flag locked). Main-process half: the `cdb-extra:*` / `cdb-flags:*` IPC handlers, the only writer of `growthbookOverrides` in `claude-desktop-bin.json`, and the `insertCSS` + `executeJavaScript` injection of the panel UI. The Settings dialog is remote claude.ai markup, so the injector anchors on semantics only (`role="dialog"` plus the visible text of known nav items) and fails soft - if it cannot find the dialog it logs one line and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> remains the way in |
+| `add_feature_theme_picker.nim` | The <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> [theme picker](themes/README.md#theme-picker-ctrlshiftt) - a searchable gallery of every user, gaming, built-in and community theme, grouped in divider-separated sections, with light/dark swatches per palette. Clicking one applies it live and saves it to `claude-desktop-extra.jsonc`, comments intact. Opens via `before-input-event`, so it needs nothing from the app's own bundle |
+| `add_feature_extra_settings.nim` | The rainbow **Extra** group in the app's own Settings dialog, with a **Themes** panel (every user, gaming, built-in and community palette as a swatch row, in the same sections as the picker - one click applies and saves it live) and a **Features** panel (all 134 catalogued GrowthBook flags as switches, pre-set to what your account actually gets, with value-carrying flags read-only and the Cowork-breaking flag locked). Main-process half: the `cdb-extra:*` / `cdb-flags:*` IPC handlers, the only writer of `growthbookOverrides` in `claude-desktop-extra.json`, and the `insertCSS` + `executeJavaScript` injection of the panel UI. The Settings dialog is remote claude.ai markup, so the injector anchors on semantics only (`role="dialog"` plus the visible text of known nav items) and fails soft - if it cannot find the dialog it logs one line and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> remains the way in |
 | `add_feature_extra_settings_bridge.nim` | The `window.cdbExtra` contextBridge in the `mainView` preload that the Extra panels talk through. One fixed method per channel and no generic `invoke()` passthrough, because the page behind this preload is remote code; the main side re-validates every sender and argument |
-| `add_growthbook_overrides.nim` | [Local feature-flag overrides](#feature-flag-overrides-advanced) via `claude-desktop-bin.jsonc` - hooks the GrowthBook features-store setter so user overrides win over the server rollout. Upstream has no local override mechanism (the flag cache is encrypted). Also applies our built-in Linux force for Hardware Buddy (Nibblet BLE, flag `2358734848`) at the store level so its `onFeatureChange` listener arms the BLE transport; a user override still wins. The in-app scan additionally needs Chromium Web Bluetooth, which the launcher enables via `--enable-blink-features=WebBluetooth` (off by default on Linux), plus the `bluez` daemon running. The commented flag list in that template doubles as the catalog the Extra settings **Features** panel renders, and the file's parser accepts a trailing comma so uncommenting a single line is enough |
+| `add_growthbook_overrides.nim` | [Local feature-flag overrides](#feature-flag-overrides-advanced) via `claude-desktop-extra.jsonc` - hooks the GrowthBook features-store setter so user overrides win over the server rollout. Upstream has no local override mechanism (the flag cache is encrypted). Also applies our built-in Linux force for Hardware Buddy (Nibblet BLE, flag `2358734848`) at the store level so its `onFeatureChange` listener arms the BLE transport; a user override still wins. The in-app scan additionally needs Chromium Web Bluetooth, which the launcher enables via `--enable-blink-features=WebBluetooth` (off by default on Linux), plus the `bluez` daemon running. The commented flag list in that template doubles as the catalog the Extra settings **Features** panel renders, and the file's parser accepts a trailing comma so uncommenting a single line is enough |
 | `fix_computer_use_linux.nim` | Enables Computer Use. Upstream gates it to macOS/Windows (platform set, executor factories, enable gate) and ships zero Linux input/screenshot backends. Removes the gates and injects a Linux executor backed by the four bundled first-party bridges (x11-bridge on X11/XWayland, wlroots-bridge on Sway/Hyprland/Niri, gnome-portal-bridge on GNOME Wayland, kwin-portal-bridge on KDE Wayland; ydotool only on exotic compositors) |
 | `fix_computer_use_tcc.nim` | Stubs the macOS TCC permission IPC (accessibility / screen recording) with `not_applicable` answers - TCC has no Linux equivalent, and without handlers the renderer's permission checks throw "No handler registered" |
 | `fix_quick_entry_position.nim` | [Quick Entry](#quick-entry) opens on the cursor's monitor instead of the primary display and auto-focuses the input; position/focus retries run only on X11 (Wayland doesn't reposition after `show()`) |
@@ -546,7 +555,7 @@ Set permanently in `~/.bashrc` / `~/.zshrc`, or pass per-launch: `CLAUDE_DISABLE
 
 ## Feature Flag Overrides (advanced)
 
-Claude Desktop gates many features behind server-side GrowthBook flags with no built-in local override. This package adds one: **`~/.config/Claude/claude-desktop-bin.jsonc`** (per-profile: the profile's userData dir; auto-created with a commented template on first launch). It is the same config file the [Custom Themes](#custom-themes) use - one file for both. A legacy `claude-desktop-bin.json` next to it keeps working and is merged in (the `.jsonc` wins per key). Uncomment an entry to activate it - comments are allowed:
+Claude Desktop gates many features behind server-side GrowthBook flags with no built-in local override. This package adds one: **`~/.config/Claude/claude-desktop-extra.jsonc`** (per-profile: the profile's userData dir; auto-created with a commented template on first launch). It is the same config file the [Custom Themes](#custom-themes) use - one file for both. Config files from the previous package name (`claude-desktop-bin.jsonc`, legacy `claude-desktop-bin.json`) are picked up automatically - the file is migrated to the new name on first launch, nothing to do. Uncomment an entry to activate it - comments are allowed:
 
 ```jsonc
 {
@@ -558,9 +567,9 @@ Claude Desktop gates many features behind server-side GrowthBook flags with no b
 
 The file is re-read on every flag load (startup and each periodic refresh) and overrides win over the server rollout; active overrides are logged to `logs/claude-patches.log`. `true`/`false` for switches, numbers/strings/objects for value flags. Most gated features are wired up while the app starts, so restart after changing a flag.
 
-**Full flag catalog:** the auto-created template lists *every* GrowthBook flag the app reads from its feature store, each commented out with a short description - browse it here: **[docs/claude-desktop-bin.jsonc](docs/claude-desktop-bin.jsonc)**. It reflects the version noted in the file header; CI verifies it stays in sync with the shipped template.
+**Full flag catalog:** the auto-created template lists *every* GrowthBook flag the app reads from its feature store, each commented out with a short description - browse it here: **[docs/claude-desktop-extra.jsonc](docs/claude-desktop-extra.jsonc)**. It reflects the version noted in the file header; CI verifies it stays in sync with the shipped template.
 
-**Or flip them in the app:** Settings → **Extra** → **Features** renders the same catalog - all 134 flags - as switches, pre-set to what your account actually gets, and writes your changes to `growthbookOverrides` in `claude-desktop-bin.json` (it offers a Restart now button, for the reason above). Value-carrying flags are shown read-only, and a flag you set by hand in the `.jsonc` stays owned by that file - hand edits win per flag ID and the panel will not overwrite them.
+**Or flip them in the app:** Settings → **Extra** → **Features** renders the same catalog - all 134 flags - as switches, pre-set to what your account actually gets, and writes your changes to `growthbookOverrides` in `claude-desktop-extra.json` (it offers a Restart now button, for the reason above). Value-carrying flags are shown read-only, and a flag you set by hand in the `.jsonc` stays owned by that file - hand edits win per flag ID and the panel will not overwrite them.
 
 **Scope and caveats:** flag IDs are Anthropic-internal and can vanish or change meaning in any release; this is unsupported expert territory - if the app misbehaves, empty the file first. The Computer Use patch forces its own enable gate directly and doesn't consult this file, and server-side account capabilities can't be overridden locally at all. Hardware Buddy (`2358734848`) is force-enabled on Linux through this same store-override mechanism, so a `"2358734848": false` entry here opts back out.
 

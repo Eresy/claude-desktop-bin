@@ -19,7 +19,7 @@
 # (Sub-patches 3b-3p, the GrowthBook rollout-bypass forces, were RETIRED
 # 2026-07-13: none of those flags is platform-gated, every read consults the
 # feature store, and add_growthbook_overrides.nim gives users a supported
-# one-line opt-in via claude-desktop-bin.jsonc growthbookOverrides - so the
+# one-line opt-in via claude-desktop-extra.jsonc growthbookOverrides - so the
 # features now follow Anthropic's server rollout, matching upstream. Removed
 # forces: 123929380 coworkKappa, 2940196192 coworkArtifacts, 1992087837
 # chillingSlothPool, 2192324205 toolResultFormatting, 2800354941

@@ -54,7 +54,7 @@ if [ -z "$TARBALL_PATH" ] || [ -z "$OUTPUT_DIR" ]; then
     echo "  pkgrel        Package release number (default: 1)"
     echo ""
     echo "Output:"
-    echo "  <output_dir>/claude-desktop-bin-<version>-<pkgrel>.<arch>.rpm"
+    echo "  <output_dir>/claude-desktop-extra-<version>-<pkgrel>.<arch>.rpm"
     exit 1
 fi
 
@@ -81,7 +81,7 @@ cp "$TARBALL_PATH" "$RPM_BUILD/SOURCES/$TARBALL_NAME"
 log_info "Copied tarball to SOURCES/"
 
 # Copy spec file
-cp "$SCRIPT_DIR/claude-desktop-bin.spec" "$RPM_BUILD/SPECS/"
+cp "$SCRIPT_DIR/claude-desktop-extra.spec" "$RPM_BUILD/SPECS/"
 
 # Build RPM
 log_info "Running rpmbuild..."
@@ -93,7 +93,7 @@ rpmbuild -bb \
     --define "pkg_version $VERSION" \
     --define "pkg_release $PKGREL" \
     --define "pkg_source $TARBALL_NAME" \
-    "$RPM_BUILD/SPECS/claude-desktop-bin.spec"
+    "$RPM_BUILD/SPECS/claude-desktop-extra.spec"
 
 # Copy RPM to output
 RPM_FILE=$(find "$RPM_BUILD/RPMS" -name "*.rpm" -type f | head -1)

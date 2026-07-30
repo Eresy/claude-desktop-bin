@@ -15,7 +15,7 @@
 # byte-identical to the .tar.gz its detached signature was made from.
 #
 # 1. Auto-detects arch from the package filename (x86_64 or aarch64) and maps it
-#    to the repo name (claude-desktop-bin / claude-desktop-bin-aarch64)
+#    to the repo name (claude-desktop-extra / claude-desktop-extra-aarch64)
 # 2. Copies the package into out_dir
 # 3. GPG-signs the package (detached, BINARY - pacman rejects armored .sig)
 # 4. Runs repo-add --include-sigs to build <repo>.db.tar.gz + <repo>.files.tar.gz
@@ -56,8 +56,18 @@ else
 fi
 
 case "$PKG_ARCH" in
-  x86_64)  REPO_NAME="claude-desktop-bin" ;;
-  aarch64) REPO_NAME="claude-desktop-bin-aarch64" ;;
+  x86_64)  REPO_NAME="claude-desktop-extra" ;;
+  aarch64) REPO_NAME="claude-desktop-extra-aarch64" ;;
+esac
+
+# LEGACY_DB_ALIAS: the repo was renamed from claude-desktop-bin. Existing
+# pacman.conf sections request <section>.db by name, so the old db names must
+# keep resolving during the transition. The alias files are byte-for-byte
+# copies, so the detached signatures stay valid. Drop this whole block (and the
+# alias copies + verification below) when the transition window ends.
+case "$PKG_ARCH" in
+  x86_64)  LEGACY_REPO_NAME="claude-desktop-bin" ;;
+  aarch64) LEGACY_REPO_NAME="claude-desktop-bin-aarch64" ;;
 esac
 
 echo "=== Updating pacman repository ==="
@@ -89,7 +99,7 @@ echo "Signed $PKG_BASENAME"
 # survive into the published assets. --include-sigs embeds the package's
 # detached signature as %PGPSIG% in the db entry (pacman 7 made this opt-in),
 # which lets pacman verify the package from the database alone.
-rm -f "$REPO_NAME".db* "$REPO_NAME".files*
+rm -f "$REPO_NAME".db* "$REPO_NAME".files* "$LEGACY_REPO_NAME".db* "$LEGACY_REPO_NAME".files*
 repo-add --include-sigs "$REPO_NAME.db.tar.gz" "$PKG_BASENAME"
 
 # repo-add leaves <repo>.db and <repo>.files as symlinks to the .tar.gz files.
@@ -104,6 +114,16 @@ for ext in db files; do
 done
 echo "Built and signed $REPO_NAME.db / $REPO_NAME.files"
 
+# LEGACY_DB_ALIAS: publish the same databases under the pre-rename repo name so
+# existing [claude-desktop-bin] pacman.conf sections keep resolving. pacman only
+# fetches <section>.db / <section>.files, so the .tar.gz variants need no alias.
+# Byte-for-byte copies keep the detached signatures valid.
+for ext in db files; do
+    cp "$REPO_NAME.$ext"     "$LEGACY_REPO_NAME.$ext"
+    cp "$REPO_NAME.$ext.sig" "$LEGACY_REPO_NAME.$ext.sig"
+done
+echo "Aliased databases to legacy name $LEGACY_REPO_NAME.db / $LEGACY_REPO_NAME.files"
+
 # --- Positive verification: never report success on an unchecked premise ---
 echo "=== Verifying repository ==="
 
@@ -113,6 +133,9 @@ SIGNED_FILES=(
   "$REPO_NAME.files.tar.gz"
   "$REPO_NAME.db"
   "$REPO_NAME.files"
+  # LEGACY_DB_ALIAS entries
+  "$LEGACY_REPO_NAME.db"
+  "$LEGACY_REPO_NAME.files"
 )
 
 for f in "${SIGNED_FILES[@]}"; do
@@ -150,6 +173,14 @@ for ext in db files; do
         echo "  [OK]   $REPO_NAME.$ext is byte-identical to $REPO_NAME.$ext.tar.gz"
     else
         echo "  [FAIL] $REPO_NAME.$ext differs from the .tar.gz it was signed from"
+        exit 1
+    fi
+    # LEGACY_DB_ALIAS: the legacy-named copy must be the exact same bytes,
+    # otherwise its (copied) signature would be a lie.
+    if cmp -s "$LEGACY_REPO_NAME.$ext" "$REPO_NAME.$ext"; then
+        echo "  [OK]   $LEGACY_REPO_NAME.$ext is byte-identical to $REPO_NAME.$ext"
+    else
+        echo "  [FAIL] $LEGACY_REPO_NAME.$ext differs from $REPO_NAME.$ext"
         exit 1
     fi
 done

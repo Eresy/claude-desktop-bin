@@ -32,8 +32,11 @@ if [ -z "$SHA256SUM" ]; then
     SHA256SUM="SKIP"
 fi
 
+# GITHUB_REPOSITORY is set by CI (owner/repo) and auto-flips when the GitHub
+# repository is renamed; the default stays the current name for local runs.
+GITHUB_REPO="${GITHUB_REPOSITORY:-patrickjaja/claude-desktop-bin}"
 if [ -z "$DOWNLOAD_URL" ]; then
-    DOWNLOAD_URL="https://github.com/patrickjaja/claude-desktop-bin/releases/download/v${VERSION}/claude-desktop-${VERSION}-linux.tar.gz"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/claude-desktop-${VERSION}-linux.tar.gz"
 fi
 
 # aarch64 tarball: env override or derive from x86_64 URL

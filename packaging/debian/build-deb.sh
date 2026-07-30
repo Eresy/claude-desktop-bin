@@ -68,7 +68,8 @@ if [ -z "$TARBALL_PATH" ] || [ -z "$OUTPUT_DIR" ]; then
     echo "  pkgrel        Package release number (default: 1)"
     echo ""
     echo "Output:"
-    echo "  <output_dir>/claude-desktop-bin_<version>-<pkgrel>_<arch>.deb"
+    echo "  <output_dir>/claude-desktop-extra_<version>-<pkgrel>_<arch>.deb"
+    echo "  <output_dir>/claude-desktop-bin_<version>-<pkgrel>_all.deb (transitional)"
     exit 1
 fi
 
@@ -84,7 +85,7 @@ log_info "Building Debian package for version: $DEB_VERSION (arch: $DEB_ARCH)"
 
 # Create work directory
 WORK_DIR=$(mktemp -d)
-DEB_ROOT="$WORK_DIR/claude-desktop-bin_${DEB_VERSION}_${DEB_ARCH}"
+DEB_ROOT="$WORK_DIR/claude-desktop-extra_${DEB_VERSION}_${DEB_ARCH}"
 
 cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
@@ -166,9 +167,9 @@ fi
 # build-patched-tarball.sh). Warn-only: pre-2026-07 release tarballs lack it.
 if [ -f "$WORK_DIR/tarball/copyright" ]; then
     install -Dm644 "$WORK_DIR/tarball/copyright" \
-        "$DEB_ROOT/usr/share/doc/claude-desktop-bin/copyright"
+        "$DEB_ROOT/usr/share/doc/claude-desktop-extra/copyright"
 else
-    log_warn "tarball has no copyright file (old tarball?) — package ships without usr/share/doc/claude-desktop-bin/copyright"
+    log_warn "tarball has no copyright file (old tarball?) - package ships without usr/share/doc/claude-desktop-extra/copyright"
 fi
 
 # Calculate installed size (in KB)
@@ -178,7 +179,7 @@ INSTALLED_SIZE=$(du -sk "$DEB_ROOT" | cut -f1)
 # Depends mirror the official Claude Desktop .deb's runtime needs (Electron 42).
 log_info "Creating control file..."
 cat > "$DEB_ROOT/DEBIAN/control" << EOF
-Package: claude-desktop-bin
+Package: claude-desktop-extra
 Version: ${DEB_VERSION}
 Section: utils
 Priority: optional
@@ -187,15 +188,17 @@ Installed-Size: ${INSTALLED_SIZE}
 Depends: libgtk-3-0, libnotify4, libnss3, xdg-utils, libatspi2.0-0, libdrm2, libgbm1, libxcb-dri3-0, libsecret-1-0, kde-cli-tools | kde-runtime | trash-cli | libglib2.0-bin | gvfs, libc6 (>= 2.34), libxtst6, libuuid1, xdg-desktop-portal, xdg-desktop-portal-gtk | xdg-desktop-portal-gnome | xdg-desktop-portal-kde
 Recommends: libasound2t64 | libasound2 | pulseaudio, libayatana-appindicator3-1 | libappindicator3-1, ca-certificates, gnome-keyring | kwalletd6 | kwalletd5, sqlite3, ${COWORK_RECOMMENDS}
 Suggests: imagemagick, socat, ydotool, kde-spectacle, nodejs, bluez
+Replaces: claude-desktop-bin (<< ${DEB_VERSION})
+Breaks: claude-desktop-bin (<< ${DEB_VERSION})
 Maintainer: Claude Desktop Linux Community <claude-desktop-linux@users.noreply.github.com>
 Homepage: https://claude.ai
-Description: Claude AI Desktop Application
- Claude is an AI assistant created by Anthropic to be helpful,
- harmless, and honest. This desktop application provides native
- access to Claude with features including conversational AI,
- code generation, document understanding, and system tray integration.
+Description: Claude Desktop with extra Linux features
+ Claude is an AI assistant created by Anthropic. This package repackages
+ the official Claude Desktop Linux build and adds extra features on top:
+ Computer Use input/screenshot backends for X11 and Wayland, custom
+ themes, multi-profile support, Quick Entry, and the Extra settings hub.
  .
- Note: This is an unofficial Linux port. Requires an Anthropic account.
+ Note: This is an unofficial community build. Requires an Anthropic account.
 EOF
 
 # postinst: SUID chrome-sandbox + AppArmor userns profile (mirrors the official
@@ -275,13 +278,62 @@ chmod +x "$DEB_ROOT/DEBIAN/postrm"
 # Build the package
 log_info "Building .deb package..."
 mkdir -p "$OUTPUT_DIR"
-DEB_PATH="$OUTPUT_DIR/claude-desktop-bin_${DEB_VERSION}_${DEB_ARCH}.deb"
+DEB_PATH="$OUTPUT_DIR/claude-desktop-extra_${DEB_VERSION}_${DEB_ARCH}.deb"
 
 if command -v fakeroot >/dev/null 2>&1; then
     fakeroot dpkg-deb --build "$DEB_ROOT" "$DEB_PATH"
 else
     dpkg-deb --build "$DEB_ROOT" "$DEB_PATH"
 fi
+
+# --- TRANSITIONAL PACKAGE (claude-desktop-bin -> claude-desktop-extra rename) ---
+# Empty dummy package that pulls in claude-desktop-extra so existing
+# claude-desktop-bin installs migrate on a plain `apt upgrade`.
+# Architecture: all - one copy serves every arch in the repo.
+# Retire this block after the rename transition window ends.
+build_transitional_deb() {
+    local trans_root="$WORK_DIR/claude-desktop-bin_${DEB_VERSION}_all"
+    mkdir -p "$trans_root/DEBIAN" "$trans_root/usr/share/doc/claude-desktop-bin"
+
+    cat > "$trans_root/usr/share/doc/claude-desktop-bin/README" << EOF
+This package has been renamed to claude-desktop-extra.
+claude-desktop-bin is now an empty transitional package and can be
+removed once claude-desktop-extra is installed:
+
+    sudo apt autoremove
+EOF
+
+    local trans_size
+    trans_size=$(du -sk "$trans_root" | cut -f1)
+
+    cat > "$trans_root/DEBIAN/control" << EOF
+Package: claude-desktop-bin
+Version: ${DEB_VERSION}
+Section: oldlibs
+Priority: optional
+Architecture: all
+Installed-Size: ${trans_size}
+Depends: claude-desktop-extra (= ${DEB_VERSION})
+Maintainer: Claude Desktop Linux Community <claude-desktop-linux@users.noreply.github.com>
+Homepage: https://claude.ai
+Description: transitional package - renamed to claude-desktop-extra
+ The Claude Desktop community build was renamed to claude-desktop-extra.
+ This transitional package ensures a smooth upgrade and can be safely
+ removed after installation.
+EOF
+
+    TRANSITIONAL_DEB_PATH="$OUTPUT_DIR/claude-desktop-bin_${DEB_VERSION}_all.deb"
+    if command -v fakeroot >/dev/null 2>&1; then
+        fakeroot dpkg-deb --build "$trans_root" "$TRANSITIONAL_DEB_PATH"
+    else
+        dpkg-deb --build "$trans_root" "$TRANSITIONAL_DEB_PATH"
+    fi
+    log_info "Built transitional package: $TRANSITIONAL_DEB_PATH"
+}
+
+TRANSITIONAL_DEB_PATH=""
+build_transitional_deb
+# --- END TRANSITIONAL PACKAGE ---
 
 # Calculate SHA256
 SHA256=$(sha256sum "$DEB_PATH" | cut -d' ' -f1)
@@ -296,4 +348,6 @@ cat > "$OUTPUT_DIR/deb-info.txt" << EOF
 VERSION="$DEB_VERSION"
 DEB="$DEB_PATH"
 SHA256="$SHA256"
+# Informational only - CI stages the transitional deb via its artifact glob.
+TRANSITIONAL_DEB="$TRANSITIONAL_DEB_PATH"
 EOF

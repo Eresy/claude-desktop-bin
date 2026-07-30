@@ -11,7 +11,7 @@
 #     cdb-flags:catalog / :read / :set / :unset, cdb-app:relaunch.
 #     cdb-themes:apply and cdb-themes:active are NOT registered here - they are
 #     owned by add_feature_theme_picker.nim and the page calls them directly.
-#   * the single writer of growthbookOverrides in <userData>/claude-desktop-bin.json
+#   * the single writer of growthbookOverrides in <userData>/claude-desktop-extra.json
 #     (atomic tmp+rename). The .jsonc is human-owned and never created or
 #     rewritten here; entries a user put there win per flag id, and the UI shows
 #     those toggles as disabled with that reason instead of pretending otherwise.

@@ -1,6 +1,6 @@
 # Project skills
 
-[Claude Code skills](https://code.claude.com/docs/en/skills) for working on **claude-desktop-bin** (the Linux-patched repackage of Anthropic's official Claude Desktop Linux `.deb`). Each skill is a folder with a `SKILL.md` (YAML frontmatter + instructions). They load automatically because they live in `.claude/skills/` under the repo - no install step. Edits take effect live (no restart).
+[Claude Code skills](https://code.claude.com/docs/en/skills) for working on **claude-desktop-extra** (the Linux-patched repackage of Anthropic's official Claude Desktop Linux `.deb`). Each skill is a folder with a `SKILL.md` (YAML frontmatter + instructions). They load automatically because they live in `.claude/skills/` under the repo - no install step. Edits take effect live (no restart).
 
 These are project-scoped on purpose: they encode *this* project's quirks (a remotely-managed official Linux `.deb` that re-minifies every release, a wide distro/session-manager matrix, Cowork on the `.deb`'s bundled native VM backend). They're committed so the knowledge is shared and survives across machines and contributors.
 

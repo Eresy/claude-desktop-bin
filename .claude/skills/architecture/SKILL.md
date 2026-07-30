@@ -1,10 +1,10 @@
 ---
 name: architecture
-description: Explains the purpose, features, and architecture of claude-desktop-bin - which repackages Anthropic's official Claude Desktop Linux .deb for Arch/Fedora/RHEL/Nix/AppImage and layers Linux-only extras (Computer Use, themes, multi-profile, Quick Entry) on top via surgical JS patches. Use when onboarding, writing docs/READMEs, explaining what the project does, or reasoning about how the official build and our patches fit together.
+description: Explains the purpose, features, and architecture of claude-desktop-extra - which repackages Anthropic's official Claude Desktop Linux .deb for Arch/Fedora/RHEL/Nix/AppImage and layers Linux-only extras (Computer Use, themes, multi-profile, Quick Entry) on top via surgical JS patches. Use when onboarding, writing docs/READMEs, explaining what the project does, or reasoning about how the official build and our patches fit together.
 when_to_use: When the user asks what the project does, how the pieces fit, what we add on top of the official build, the USPs, or wants an architecture/overview explanation for docs or a new contributor.
 ---
 
-# Architecture - claude-desktop-bin
+# Architecture - claude-desktop-extra
 
 Repackages Anthropic's **official Claude Desktop Linux `.deb`** for the distros Anthropic does not ship (Arch via our own pacman repo, Fedora/RHEL, NixOS, AppImage) and for our own Debian/Ubuntu `.deb`, while layering a small set of **Linux-only value-adds** that the official build does not provide. See `/linux` for compat specifics.
 
@@ -45,7 +45,7 @@ Historically this project shipped a sibling Go daemon (`claude-cowork-service`, 
 Anthropic official Claude Desktop Linux .deb  (Electron 42.5.1 + native Cowork VM backend)
         │  download → verify GPG+SHA256 → dpkg-deb -x → asar extract
         ▼
-claude-desktop-bin  (48 JS patches: Linux fixes + Computer Use + themes + profiles + Quick Entry)
+claude-desktop-extra  (48 JS patches: Linux fixes + Computer Use + themes + profiles + Quick Entry)
         │  asar pack → tarball
         ▼
 our pacman repo / our .deb / .rpm / .AppImage / Nix

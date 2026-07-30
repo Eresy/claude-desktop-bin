@@ -449,7 +449,7 @@ kbd{
       state.active = name || null;
       markActive();
       paintAccent();
-      var where = (r && r.saved) || "claude-desktop-bin.jsonc";
+      var where = (r && r.saved) || "claude-desktop-extra.jsonc";
       var shown = name || "stock";
       for (var i = 0; i < state.entries.length; i++) {
         if (state.entries[i].name === name) { shown = state.entries[i].displayName; break; }

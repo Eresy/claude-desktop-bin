@@ -25,7 +25,7 @@ To pick it up:
 
 1. Clone this repo and `cd` into it:
    ```
-   git clone https://github.com/{{REPO}}.git && cd claude-desktop-bin
+   git clone https://github.com/{{REPO}}.git && cd "$(basename {{REPO}})"
    ```
 2. Start **Claude Code** in the project (`claude`) and run the update skill:
    ```

@@ -20,12 +20,17 @@
   // Both filenames are honored and merged (.jsonc wins per key) so existing
   // plain-JSON configs (themes) keep working; the commented template lives in
   // .jsonc where editors expect comments.
+  // __cdbCfgMigrate (installed by the custom-themes patch, the earliest config
+  // consumer) copies legacy claude-desktop-bin.{json,jsonc} to the
+  // claude-desktop-extra names once; calling it here too covers the case where
+  // flags load before any theme read ever happens.
   function configPaths() {
+    try { (globalThis.__cdbCfgMigrate || function () {})(); } catch (e) {}
     var path = require("path");
     var ud = require("electron").app.getPath("userData");
     return {
-      json: path.join(ud, "claude-desktop-bin.json"),
-      jsonc: path.join(ud, "claude-desktop-bin.jsonc")
+      json: path.join(ud, "claude-desktop-extra.json"),
+      jsonc: path.join(ud, "claude-desktop-extra.jsonc")
     };
   }
 
@@ -70,9 +75,9 @@
   }
 
   var TEMPLATE = [
-    "// claude-desktop-bin - local configuration (custom themes + feature-flag overrides)",
+    "// claude-desktop-extra - local configuration (custom themes + feature-flag overrides)",
     "//",
-    "// This .jsonc file is merged over claude-desktop-bin.json in the same directory",
+    "// This .jsonc file is merged over claude-desktop-extra.json in the same directory",
     "// (per key; .jsonc wins) - an existing .json config keeps working unchanged.",
     "// Comments (// and /* */) are allowed in both files.",
     "//",
@@ -85,7 +90,7 @@
     "//",
     "// growthbookOverrides (advanced, unsupported territory):",
     "// The Extra > Features panel in the app's Settings dialog edits the same",
-    "// flags with a switch per flag. It writes claude-desktop-bin.json; entries you",
+    "// flags with a switch per flag. It writes claude-desktop-extra.json; entries you",
     "// put here win per flag id, and that panel shows those as locked.",
     "// Every GrowthBook flag observed being read from the feature store in Claude",
     "// Desktop v1.21459.0 is listed below, commented out. Uncomment a line to force",
@@ -96,7 +101,7 @@
     "// and account changes. That does NOT make a change take effect on its own -",
     "// most gated features are wired up while the app starts, so restart after",
     "// changing a flag. Overrides win over Anthropic's server rollout.",
-    "// Flags force-enabled by claude-desktop-bin's binary patches",
+    "// Flags force-enabled by claude-desktop-extra's binary patches",
     "// (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this",
     "// file entirely. Active overrides are logged to logs/claude-patches.log.",
     "// Flag IDs are Anthropic-internal and can vanish or change meaning in any",
@@ -338,7 +343,7 @@
   //   Linux is outside Anthropic's rollout, so the store value stays off there;
   //   we set it on. Idle when no device is present (the auto-reconnect loop gates
   //   on a paired-device preference), so this is safe for all Linux users.
-  // A user override in claude-desktop-bin.jsonc still wins (readOverrides is
+  // A user override in claude-desktop-extra.jsonc still wins (readOverrides is
   // merged AFTER these), so "2358734848": false opts back out.
   function builtinForces() {
     var out = {};

@@ -56,7 +56,7 @@ export function buildInjectedModule() {
 
 /**
  * Load the engine with electron shimmed. `config` (an object) is written to
- * claude-desktop-bin.jsonc in a fresh userData dir BEFORE the engine boots, which is
+ * claude-desktop-extra.jsonc in a fresh userData dir BEFORE the engine boots, which is
  * how the engine sees themes and an activeTheme.
  */
 export function installEngine({ config } = {}) {
@@ -65,7 +65,7 @@ export function installEngine({ config } = {}) {
   const Module = require2("module");
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "cdb-userdata-"));
   if (config) {
-    fs.writeFileSync(path.join(userData, "claude-desktop-bin.jsonc"),
+    fs.writeFileSync(path.join(userData, "claude-desktop-extra.jsonc"),
       JSON.stringify(config, null, 2));
   }
   const appEvents = {};

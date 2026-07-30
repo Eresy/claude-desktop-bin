@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Local build script for claude-desktop-bin (cross-distro).
+# Local build script for claude-desktop-extra (cross-distro).
 #
 # Ingests the OFFICIAL Claude Desktop Linux .deb (which already bundles Electron,
 # node-pty, chrome-sandbox, tray icons, ion-dist, ...), applies the Linux JS
@@ -178,7 +178,7 @@ log_info "Generating PKGBUILD..."
 "$SCRIPT_DIR/generate-pkgbuild.sh" "$VERSION" "$SHA256" "file://$TARBALL" ${PKGREL:+"$PKGREL"} > "$BUILD_DIR/PKGBUILD"
 
 # makepkg reads the install= file relative to the PKGBUILD dir, so copy it in.
-cp "$PROJECT_DIR/claude-desktop-bin.install" "$BUILD_DIR/claude-desktop-bin.install"
+cp "$PROJECT_DIR/claude-desktop-extra.install" "$BUILD_DIR/claude-desktop-extra.install"
 
 # Build the package with makepkg.
 #
@@ -198,7 +198,7 @@ cd "$BUILD_DIR"
 SRCDEST="$SRCDEST_DIR" makepkg -sf --noconfirm
 
 # Find the built package
-PKG_FILE=$(ls claude-desktop-bin-*.pkg.tar.zst 2>/dev/null | head -1)
+PKG_FILE=$(ls claude-desktop-extra-*.pkg.tar.zst 2>/dev/null | head -1)
 
 if [ -z "$PKG_FILE" ]; then
     log_error "Build failed - no package file found"

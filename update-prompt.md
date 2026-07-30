@@ -87,9 +87,9 @@ Copy-paste this into Claude Code when a new version is available:
 > 7. Run the Feature Flag Audit (Prompt 3) to check for new/changed flags
 >
 > 8. Install:
->    - **Arch:** `sudo pacman -U build/claude-desktop-bin-*-x86_64.pkg.tar.zst`
->    - **Ubuntu/Debian:** `sudo apt install ./build/claude-desktop-bin_*.deb`
->    - **Fedora/RHEL:** `sudo dnf install build/claude-desktop-bin-*.rpm`
+>    - **Arch:** `sudo pacman -U build/claude-desktop-extra-*-x86_64.pkg.tar.zst`
+>    - **Ubuntu/Debian:** `sudo apt install ./build/claude-desktop-extra_*.deb`
+>    - **Fedora/RHEL:** `sudo dnf install build/claude-desktop-extra-*.rpm`
 >
 > 9. Update documentation (compare what you found vs your version A baseline):
 >    - `baseline/CLAUDE_FEATURE_FLAGS.md` — if flags added/removed/renamed

@@ -1,4 +1,4 @@
-# pacman install hook for claude-desktop-bin.
+# pacman install hook for claude-desktop-extra.
 #
 # Mirrors what the official Claude Desktop .deb's postinst does on Linux:
 #   1. chrome-sandbox must be SUID root (4755) for Chromium's setuid sandbox.
@@ -11,7 +11,7 @@
 #   3. Refresh the desktop + icon caches so the launcher entry appears.
 
 _APPARMOR_PROFILE="/etc/apparmor.d/claude-desktop"
-_SANDBOX="/usr/lib/claude-desktop-bin/chrome-sandbox"
+_SANDBOX="/usr/lib/claude-desktop/chrome-sandbox"
 
 _fix_sandbox() {
     if [ -f "$_SANDBOX" ]; then
@@ -28,7 +28,7 @@ _install_apparmor() {
 abi <abi/4.0>,
 include <tunables/global>
 
-profile claude-desktop /usr/lib/claude-desktop-bin/claude flags=(unconfined) {
+profile claude-desktop /usr/lib/claude-desktop/claude flags=(unconfined) {
   userns,
 
   include if exists <local/claude-desktop>
@@ -69,17 +69,32 @@ _cowork_note() {
     echo "==>   sudo usermod -aG kvm \$USER    (then log out and back in)"
 }
 
+_legacy_repo_note() {
+    # The package was renamed from claude-desktop-bin. The legacy repo db name
+    # is still published during the transition, so old pacman.conf sections keep
+    # working - but users should move to the new section name.
+    if grep -Eq '^\s*\[claude-desktop-bin(-aarch64)?\]' /etc/pacman.conf 2>/dev/null; then
+        local _suffix=""
+        [ "$(uname -m)" = "aarch64" ] && _suffix="-aarch64"
+        echo "==> This package is now claude-desktop-extra. Update /etc/pacman.conf:"
+        echo "==>   rename the [claude-desktop-bin${_suffix}] section to [claude-desktop-extra${_suffix}]"
+        echo "==>   (the Server line stays unchanged), then run: sudo pacman -Sy"
+    fi
+}
+
 post_install() {
     _fix_sandbox
     _install_apparmor
     _refresh_caches
     _cowork_note
+    _legacy_repo_note
 }
 
 post_upgrade() {
     _fix_sandbox
     _install_apparmor
     _refresh_caches
+    _legacy_repo_note
 }
 
 post_remove() {

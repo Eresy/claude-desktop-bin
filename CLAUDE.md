@@ -16,7 +16,7 @@ The official `.deb` (apt repo `https://downloads.claude.ai/claude-desktop/apt`) 
 
 | Distro | Packaging | Min glibc | Arch |
 |--------|-----------|-----------|------|
-| Arch Linux | own pacman repo (`claude-desktop-bin`) | 2.41 (rolling) | x86_64, aarch64 |
+| Arch Linux | own pacman repo (`claude-desktop-extra`) | 2.41 (rolling) | x86_64, aarch64 |
 | Ubuntu 22.04+ | `.deb` | 2.35 | amd64, arm64 |
 | Debian 12+ | `.deb` | 2.36 | amd64, arm64 |
 | Fedora 40+ | `.rpm` | 2.39 | x86_64, aarch64 |
@@ -38,7 +38,7 @@ The official `.deb` (apt repo `https://downloads.claude.ai/claude-desktop/apt`) 
 
 CI enforces the floor via `objdump -T | grep GLIBC_` verification. If a new native binary is added, pick the floor that matches its minimum viable distro. (node-pty is not in this table — it is bundled pre-built in the official `.deb`, not built by us.)
 
-**RPM packaging caveat:** per-binary floors above the distro floor only work because the spec excludes the bundled tree from rpm's automatic ELF dependency generator (`__requires_exclude_from` in `packaging/rpm/claude-desktop-bin.spec`); without it, the gnome/kwin bridges' glibc-2.39 symbols become package-level requirements and the rpm cannot install on RHEL 9 (glibc 2.34). CI's rockylinux:9 install test guards this permanently.
+**RPM packaging caveat:** per-binary floors above the distro floor only work because the spec excludes the bundled tree from rpm's automatic ELF dependency generator (`__requires_exclude_from` in `packaging/rpm/claude-desktop-extra.spec`); without it, the gnome/kwin bridges' glibc-2.39 symbols become package-level requirements and the rpm cannot install on RHEL 9 (glibc 2.34). CI's rockylinux:9 install test guards this permanently.
 
 | Session type | Compositors / DEs | Input backend | Screenshot tools |
 |-------------|-------------------|---------------|-----------------|
@@ -299,7 +299,7 @@ Or build without installing:
 
 ```bash
 ./scripts/build-local.sh
-sudo pacman -U build/claude-desktop-bin-*.pkg.tar.zst
+sudo pacman -U build/claude-desktop-extra-*.pkg.tar.zst
 ```
 
 ### 8. Commit Convention
@@ -467,4 +467,4 @@ vboxmanage startvm "Ubuntu"
 vboxmanage startvm "Fedora43-KDE"
 # SSH: ssh -p 2223 localhost
 # Shared folder: /tmp/fedora-test → auto-mounted in guest
-# Install RPM: sudo dnf install /media/sf_shared/claude-desktop-bin-*.x86_64.rpm
+# Install RPM: sudo dnf install /media/sf_shared/claude-desktop-extra-*.x86_64.rpm

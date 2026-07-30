@@ -48,7 +48,7 @@ await runSuite(async () => {
 window.cdbThemes = {
   list: function () { return Promise.resolve({ ok: true, entries: ${JSON.stringify(ENTRIES)} }); },
   active: function () { return Promise.resolve({ ok: true, name: ${JSON.stringify(ACTIVE)} }); },
-  apply: function () { return Promise.resolve({ ok: true, saved: "claude-desktop-bin.jsonc" }); },
+  apply: function () { return Promise.resolve({ ok: true, saved: "claude-desktop-extra.jsonc" }); },
   close: function () {}
 };
 </script>

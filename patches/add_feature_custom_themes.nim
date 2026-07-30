@@ -3,7 +3,7 @@
 #
 # Custom CSS theme injection for Claude Desktop on Linux (dual-variant).
 #
-# Reads a JSON config file (~/.config/Claude/claude-desktop-bin.json) at startup
+# Reads a JSON config file (~/.config/Claude/claude-desktop-extra.json) at startup
 # and injects CSS variable overrides into ALL windows (main chat, Quick Entry,
 # Find-in-Page, About) using Electron's stable webContents.insertCSS() API.
 #
@@ -231,11 +231,33 @@ const THEME_INJECTION_JS_MID_B =
 // nordic is an alias for the nord built-in (CONTRACT 5). Add more aliases here as needed.
 var __cdb_aliases={"nordic":"nord"};
 var __cdb_marker="__cdb_dualvariant";
-var __cdb_cfgPath=_path.join(_app.getPath("userData"),"claude-desktop-bin.json");
-var __cdb_cfgPathC=_path.join(_app.getPath("userData"),"claude-desktop-bin.jsonc");
+var __cdb_cfgPath=_path.join(_app.getPath("userData"),"claude-desktop-extra.json");
+var __cdb_cfgPathC=_path.join(_app.getPath("userData"),"claude-desktop-extra.jsonc");
 function __cdb_log(m){(globalThis.__cdbDiag||console.log)("[CustomThemes] "+m)}
-// Config may live in claude-desktop-bin.json (legacy plain JSON) and/or
-// claude-desktop-bin.jsonc (commented template auto-created by the
+// One-time rename migration (claude-desktop-bin -> claude-desktop-extra): copy
+// each legacy file to its new name, pairwise (.json stays machine-written, .jsonc
+// stays human-owned - crossing them would flip who owns which keys). Copies, not
+// moves: the old files stay behind as backups. This is the SINGLE implementation;
+// the growthbook-overrides and extra-settings patches call it lazily through
+// globalThis.__cdbCfgMigrate. It lives here because this IIFE is the earliest
+// config consumer (top-level __cdb_loadCfg below runs at bundle load).
+var __cdb_migrate=function(){
+try{
+var ud=_app.getPath("userData"),pairs=[["claude-desktop-bin.jsonc","claude-desktop-extra.jsonc"],["claude-desktop-bin.json","claude-desktop-extra.json"]],i;
+for(i=0;i<pairs.length;i++){
+try{
+var oldP=_path.join(ud,pairs[i][0]),newP=_path.join(ud,pairs[i][1]);
+if(_fs.existsSync(newP)||!_fs.existsSync(oldP))continue;
+_fs.copyFileSync(oldP,newP,_fs.constants.COPYFILE_EXCL);
+__cdb_log("migrated "+pairs[i][0]+" -> "+pairs[i][1]+" (old file left in place as backup)");
+}catch(e){if(!e||e.code!=="EEXIST")__cdb_log("config migration failed for "+pairs[i][0]+": "+(e&&e.message))}
+}
+}catch(e){}
+};
+globalThis.__cdbCfgMigrate=__cdb_migrate;
+__cdb_migrate();
+// Config may live in claude-desktop-extra.json (legacy plain JSON) and/or
+// claude-desktop-extra.jsonc (commented template auto-created by the
 // growthbook-overrides patch). Both are JSONC (comments stripped outside
 // strings) and merged per key with .jsonc winning; themes maps merge per name.
 //
@@ -424,8 +446,8 @@ try{var tmp=p+".cdb-tmp";_fs.writeFileSync(tmp,txt,"utf8");_fs.renameSync(tmp,p)
 catch(e){return {ok:false,error:"could not write "+p+": "+e.message}}
 }
 function __cdb_template(val){
-return ["// claude-desktop-bin.jsonc - local Claude Desktop config. Comments are allowed;",
-"// this file wins over claude-desktop-bin.json key by key.",
+return ["// claude-desktop-extra.jsonc - local Claude Desktop config. Comments are allowed;",
+"// this file wins over claude-desktop-extra.json key by key.",
 "{",
 "  // Active theme slug: a built-in, a bundled community palette, or your own entry",
 "  // under \"themes\". An empty string restores Claude's stock look.",
@@ -556,7 +578,7 @@ globalThis.__cdbThemes={version:1,list:__cdb_listEntries,active:function(){retur
 try{
 __cdb_log("Reading config: "+__cdb_cfgPath+" + .jsonc");
 var __cdb_cfg0=__cdb_loadCfg();
-if(!__cdb_cfg0.__present)__cdb_log("No config file found (claude-desktop-bin.json/.jsonc); registry installed, no theme applied");
+if(!__cdb_cfg0.__present)__cdb_log("No config file found (claude-desktop-extra.json/.jsonc); registry installed, no theme applied");
 else{
 var __cdb_name0=__cdb_cfg0.activeTheme;
 if(!__cdb_name0)__cdb_log("No activeTheme set; registry installed, no theme applied");

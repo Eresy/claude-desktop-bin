@@ -27,7 +27,7 @@ can judge a palette before wearing it.
 
 Click a card and the theme applies immediately, in every open window. No restart, no
 editing a file by hand. The picker then writes your choice into
-`~/.config/Claude/claude-desktop-bin.jsonc`, replacing only the `activeTheme` value
+`~/.config/Claude/claude-desktop-extra.jsonc`, replacing only the `activeTheme` value
 and leaving every comment and every other key exactly as you had them. If that file
 does not exist yet, the picker creates it with a short commented template.
 
@@ -56,7 +56,7 @@ you'll find an **Extra** group in the nav with two entries:
 - **Themes** - every theme available to you as a row with color dots, in the same
   sections as the picker (your themes, Gaming, built-in, community). Clicking one applies
   it live - colors and spinner both - and saves `activeTheme` the same way the picker
-  does, into `claude-desktop-bin.jsonc` with your comments intact.
+  does, into `claude-desktop-extra.jsonc` with your comments intact.
 - **Features** - the 134 catalogued GrowthBook feature flags as switches, so you can
   browse and flip them without hand-editing a config file. See
   [Feature Flag Overrides](../README.md#feature-flag-overrides-advanced) for what the
@@ -66,15 +66,15 @@ The Features panel starts from what your account actually gets: flags upstream a
 enables show up switched on, and turning one off writes an explicit `false`. Flags that
 carry a value rather than a switch are listed read-only, and the one flag that breaks
 Cowork when enabled is not toggleable at all. Anything you set by hand in
-`claude-desktop-bin.jsonc` is shown as `.jsonc`-owned and left to that file - the
+`claude-desktop-extra.jsonc` is shown as `.jsonc`-owned and left to that file - the
 hand-edited value wins per flag ID, and the panel will not fight it.
 
 Where the two panels save differs, because they answer to different files:
 
 | Panel | Writes | Takes effect |
 |-------|--------|--------------|
-| Themes | `activeTheme` in `claude-desktop-bin.jsonc` (comment-preserving) | live, in every open window |
-| Features | `growthbookOverrides` in `claude-desktop-bin.json` | after a restart |
+| Themes | `activeTheme` in `claude-desktop-extra.jsonc` (comment-preserving) | live, in every open window |
+| Features | `growthbookOverrides` in `claude-desktop-extra.json` | after a restart |
 
 Flag changes need a restart because the features they gate are wired up when the app
 starts, so the panel says so and offers a **Restart now** button.
@@ -103,8 +103,8 @@ dark mode (they look gaudy on a light surface).
 
 ## JSON schema
 
-Place your theme config at `~/.config/Claude/claude-desktop-bin.jsonc`
-(comments allowed; a legacy `claude-desktop-bin.json` also keeps working and is
+Place your theme config at `~/.config/Claude/claude-desktop-extra.jsonc`
+(comments allowed; configs under the previous `claude-desktop-bin` name also keep working and are
 merged in, with the `.jsonc` winning per key). The dual-variant shape:
 
 ```jsonc
@@ -528,7 +528,7 @@ rm -rf /tmp/claude-inspect
 
 ## Tips for theme creators
 
-1. **Start from a built-in** - copy one of the `themes/*/claude-desktop-bin.json`
+1. **Start from a built-in** - copy one of the `themes/*/claude-desktop-extra.json`
    files (they're all dual-variant now) and edit both the `light` and `dark` blocks.
 2. **HSL format** - `"hue saturation% lightness%"` (e.g. `"285 50% 8%"`), no
    `hsl(...)` wrapper. Legacy `--claude-*` variables are **hex** (with alpha for

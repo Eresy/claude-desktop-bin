@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Full review of the claude-desktop-bin project - patches vs the official Linux .deb (still needed? new ones needed? did the surrounding code change?), docs accuracy, Linux compatibility across the distro/session matrix, and runtime logs. Orchestrates a team of sub-agents and produces a consolidated report with solution approaches.
+description: Full review of the claude-desktop-extra project - patches vs the official Linux .deb (still needed? new ones needed? did the surrounding code change?), docs accuracy, Linux compatibility across the distro/session matrix, and runtime logs. Orchestrates a team of sub-agents and produces a consolidated report with solution approaches.
 disable-model-invocation: true
 ---
 

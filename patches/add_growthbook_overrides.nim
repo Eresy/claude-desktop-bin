@@ -1,13 +1,13 @@
 # @patch-target: app.asar.contents/.vite/build/index.js
 # @patch-type: nim
 #
-# Local GrowthBook feature-flag overrides via <userData>/claude-desktop-bin.json.
+# Local GrowthBook feature-flag overrides via <userData>/claude-desktop-extra.json.
 #
 # GrowthBook flags are served by Anthropic (/api/desktop/features) with no local
 # override layer (the fcache disk cache is safeStorage-encrypted). This patch adds
 # one: every load path (network fetch, disk cache, deployment-mode hardcoded set)
 # funnels through a single features-store setter; we hook its head so a user's
-# claude-desktop-bin.json (JSONC - comments allowed; auto-created template on
+# claude-desktop-extra.json (JSONC - comments allowed; auto-created template on
 # first run) is merged over the freshly loaded map. Overrides are applied on a
 # shallow copy, so the caller's raw payload (which feeds the disk cache) stays
 # untouched. Layering: user override > server rollout.

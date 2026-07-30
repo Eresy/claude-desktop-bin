@@ -957,7 +957,7 @@
 
       var paths = state.paths || {};
       var pathLine = el("div", "cdbx-path");
-      pathLine.textContent = "Overrides are written to " + (paths.json || "claude-desktop-bin.json") +
+      pathLine.textContent = "Overrides are written to " + (paths.json || "claude-desktop-extra.json") +
         (paths.jsonc ? "  |  hand-edited entries in " + paths.jsonc + " win over this page" : "");
       panel.appendChild(pathLine);
       if (!state.storeSeen) {
@@ -985,9 +985,9 @@
       }
 
       function origin(id) {
-        if (Object.prototype.hasOwnProperty.call(jsoncIds, id)) return "set in claude-desktop-bin.jsonc";
+        if (Object.prototype.hasOwnProperty.call(jsoncIds, id)) return "set in claude-desktop-extra.jsonc";
         if (Object.prototype.hasOwnProperty.call(overrides, id)) return "your override (" + JSON.stringify(overrides[id]) + ")";
-        if (Object.prototype.hasOwnProperty.call(builtins, id)) return "forced on by claude-desktop-bin for Linux";
+        if (Object.prototype.hasOwnProperty.call(builtins, id)) return "forced on by claude-desktop-extra for Linux";
         var entry = server[id];
         if (entry) return entry.on === true ? "on for your account" : "off for your account";
         return "not in your account's flag payload";
@@ -1035,10 +1035,10 @@
         if (entry.warn) {
           toggle.disabled = true;
           toggle.title = entry.note;
-          stateLine.textContent = origin(id) + " - locked by claude-desktop-bin";
+          stateLine.textContent = origin(id) + " - locked by claude-desktop-extra";
         } else if (lockedJsonc) {
           toggle.disabled = true;
-          toggle.title = "Edit claude-desktop-bin.jsonc to change this flag";
+          toggle.title = "Edit claude-desktop-extra.jsonc to change this flag";
         }
 
         var clearBtn = null;
@@ -1101,7 +1101,7 @@
       entries.forEach(function (entry) { known[entry.id] = 1; });
       Object.keys(builtins).forEach(function (id) {
         if (known[id]) return;
-        entries.push({ id: id, note: "forced on by claude-desktop-bin on Linux", valueFlag: false, warn: "" });
+        entries.push({ id: id, note: "forced on by claude-desktop-extra on Linux", valueFlag: false, warn: "" });
       });
 
       function draw(filter) {

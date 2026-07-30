@@ -1,6 +1,6 @@
 ---
 name: fresh-upstream
-description: For claude-desktop-bin - wipe any existing extracted Claude Desktop bundles and extract a fresh, CLEAN, UNPATCHED copy of the latest official Claude Desktop Linux .deb into ./tmp/ for patch analysis. Fetches + GPG/SHA256-verifies the latest .deb if missing or stale, then extracts app.asar via asar (NOT the build script, which applies patches).
+description: For claude-desktop-extra - wipe any existing extracted Claude Desktop bundles and extract a fresh, CLEAN, UNPATCHED copy of the latest official Claude Desktop Linux .deb into ./tmp/ for patch analysis. Fetches + GPG/SHA256-verifies the latest .deb if missing or stale, then extracts app.asar via asar (NOT the build script, which applies patches).
 disable-model-invocation: true
 allowed-tools: Bash(rm -rf *), Bash(mkdir -p *), Bash(ar *), Bash(tar *), Bash(dpkg-deb *), Bash(asar *), Bash(node --check *), Bash(ls *), Bash(cat *), Bash(stat *), Bash(.github/scripts/apt-fetch-verify.sh *), Bash(sha256sum *)
 ---

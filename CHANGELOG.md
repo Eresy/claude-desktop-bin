@@ -1,8 +1,22 @@
 # Changelog
 
-All notable changes to the claude-desktop-bin packages will be documented in this file.
+All notable changes to the claude-desktop-extra packages will be documented in this file.
 
 ## 2026-07-30
+
+### The project is now claude-desktop-extra
+
+The packages are renamed from `claude-desktop-bin` to **`claude-desktop-extra`**. The name says what the project does: the official Claude Desktop Linux build covers Debian-based distros only, and this project fills the gaps - Arch, Fedora, RHEL, NixOS and AppImage packaging - plus the extra features on top (Computer Use backends, custom themes, multi-profile, Quick Entry, and the growing Extra settings hub).
+
+Upgrades are automatic on every distro:
+
+- **Arch**: the new package carries `replaces=claude-desktop-bin`, so `pacman -Syu` swaps it in. The pacman repo section is now `[claude-desktop-extra]`; the old `[claude-desktop-bin]` section keeps working for the transition (the repo publishes both database names), and the package prints a one-line note if your pacman.conf still uses the old one. The install dir moves to `/usr/lib/claude-desktop`, the same path deb and rpm always used.
+- **Debian/Ubuntu**: a transitional `claude-desktop-bin` package depends on the new name, so `apt upgrade` migrates in place.
+- **Fedora/RHEL**: the rpm carries `Obsoletes: claude-desktop-bin`, so `dnf upgrade` migrates in place.
+- **NixOS**: the flake gains a `claude-desktop-extra` attribute; the existing `claude-desktop` and `default` attributes keep working.
+- **Config**: `~/.config/Claude/claude-desktop-extra.jsonc` is the config file now. On first start the app copies an existing `claude-desktop-bin.jsonc`/`.json` over automatically - themes and flag overrides survive, and the old files stay in place as backups.
+
+Version numbers keep their `{upstream}-{pkgrel}` format. The `/deploy` skill now documents the rule (new upstream version resets pkgrel to 1; any re-release at the same upstream bumps it) and decides `force_rebuild` itself from what actually changed since the last release.
 
 ### The Code and Cowork transcript follows a running response again
 

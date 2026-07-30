@@ -12,10 +12,16 @@
 %global __requires_exclude_from ^/usr/lib/claude-desktop/.*$
 %global __provides_exclude_from ^/usr/lib/claude-desktop/.*$
 
-Name:           claude-desktop-bin
+Name:           claude-desktop-extra
 Version:        %{pkg_version}
 Release:        %{?pkg_release}%{!?pkg_release:1}
-Summary:        Claude AI Desktop Application for Linux
+Summary:        Claude Desktop for Linux with extra features (Computer Use, themes, profiles)
+
+# The project was renamed from claude-desktop-bin to claude-desktop-extra
+# (2026-07). Obsoletes lets dnf migrate existing installs automatically;
+# Provides keeps anything that referenced the old name resolvable.
+Obsoletes:      claude-desktop-bin <= 1.24012.9
+Provides:       claude-desktop-bin = %{version}-%{release}
 
 License:        Proprietary
 URL:            https://claude.ai
@@ -96,12 +102,13 @@ Suggests:       nodejs
 Suggests:       gnome-keyring
 
 %description
-Claude is an AI assistant created by Anthropic to be helpful,
-harmless, and honest. This desktop application provides native
-access to Claude with features including conversational AI,
-code generation, document understanding, and system tray integration.
+Anthropic's official Claude Desktop for Linux, repackaged for distros the
+official build does not ship (Fedora, RHEL, and more), with extra Linux
+features on top: Computer Use input/screenshot backends for X11 and Wayland,
+custom themes with the "Extra" settings hub, multi-profile support, and a
+Quick Entry launcher.
 
-Note: This is an unofficial Linux port. Requires an Anthropic account.
+Note: This is an unofficial community build. Requires an Anthropic account.
 
 %prep
 # Extract tarball (ships the official Claude Desktop tree verbatim under

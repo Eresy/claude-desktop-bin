@@ -4,7 +4,7 @@
  *
  * Three jobs:
  *   1. Register the ipcMain handlers the page's cdbExtra bridge talks to.
- *   2. Own the ONLY writer of growthbookOverrides in claude-desktop-bin.json
+ *   2. Own the ONLY writer of growthbookOverrides in claude-desktop-extra.json
  *      (the .jsonc is human-owned and never created or rewritten here).
  *   3. Install the page-side UI on every http(s) dom-ready (insertCSS + one
  *      executeJavaScript whose return value is logged).
@@ -42,10 +42,13 @@
   }
 
   function __cdbEx_paths() {
+    // One-time legacy claude-desktop-bin.{json,jsonc} migration; implemented
+    // once in the custom-themes patch (globalThis.__cdbCfgMigrate).
+    try { (globalThis.__cdbCfgMigrate || function () {})(); } catch (e) {}
     var ud = _app.getPath("userData");
     return {
-      json: _path.join(ud, "claude-desktop-bin.json"),
-      jsonc: _path.join(ud, "claude-desktop-bin.jsonc"),
+      json: _path.join(ud, "claude-desktop-extra.json"),
+      jsonc: _path.join(ud, "claude-desktop-extra.jsonc"),
       userData: ud
     };
   }
@@ -338,7 +341,7 @@
       }
       var jsonc = __cdbEx_readFileOverrides(__cdbEx_paths().jsonc);
       if (Object.prototype.hasOwnProperty.call(jsonc, id)) {
-        return { ok: false, error: id + " is set in claude-desktop-bin.jsonc, which wins over this page - edit that file instead" };
+        return { ok: false, error: id + " is set in claude-desktop-extra.jsonc, which wins over this page - edit that file instead" };
       }
       var res = __cdbEx_writeOverrides(function (o) { o[id] = value; });
       if (res.ok) __cdbEx_log("override " + id + "=" + JSON.stringify(value) + " saved to " + res.path);

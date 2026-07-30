@@ -24,7 +24,7 @@ Three ways, all equivalent:
   the [theme picker](README.md#theme-picker-ctrlshiftt). It applies immediately, in every
   open window.
 - Open **Settings -> Extra -> Themes** inside the app and click a row.
-- Set the slug by hand in `~/.config/Claude/claude-desktop-bin.jsonc`:
+- Set the slug by hand in `~/.config/Claude/claude-desktop-extra.jsonc`:
 
   ```jsonc
   { "activeTheme": "rose-pine-moon" }

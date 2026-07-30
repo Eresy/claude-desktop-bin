@@ -33,8 +33,8 @@ fi
 # Detect and validate architecture, and map it to the repository name
 ARCH="$(uname -m)"
 case "$ARCH" in
-  x86_64)  REPO_NAME="claude-desktop-bin" ;;
-  aarch64) REPO_NAME="claude-desktop-bin-aarch64" ;;
+  x86_64)  REPO_NAME="claude-desktop-extra" ;;
+  aarch64) REPO_NAME="claude-desktop-extra-aarch64" ;;
   *) echo "Error: Unsupported architecture: $ARCH (supported: x86_64, aarch64)"; exit 1 ;;
 esac
 echo "  Detected architecture: $ARCH (repository: $REPO_NAME)"
@@ -85,13 +85,14 @@ if [ ! -f "$BACKUP_PATH" ]; then
   echo "  Backed up $PACMAN_CONF to $BACKUP_PATH"
 fi
 
-# Drop our marker comment and any [claude-desktop-bin] / [claude-desktop-bin-aarch64]
-# section (a section runs until the next [header]), then trim trailing blank
-# lines so repeated runs don't grow the file.
+# Drop our marker comment and any section we ever wrote - both the current
+# [claude-desktop-extra] names and the pre-rename [claude-desktop-bin] names
+# (a section runs until the next [header]) - then trim trailing blank lines so
+# repeated runs don't grow the file and old installs migrate cleanly.
 awk -v marker="$MARKER" '
     $0 == marker { next }
     /^[[:space:]]*\[/ {
-        ours = ($0 ~ /^[[:space:]]*\[claude-desktop-bin(-aarch64)?\][[:space:]]*$/)
+        ours = ($0 ~ /^[[:space:]]*\[claude-desktop-(extra|bin)(-aarch64)?\][[:space:]]*$/)
     }
     ours { next }
     { lines[++n] = $0; if ($0 ~ /[^[:space:]]/) last = n }
@@ -121,7 +122,7 @@ pacman -Sy
 echo ""
 echo "Done! Install Claude Desktop with:"
 echo ""
-echo "  sudo pacman -Syu claude-desktop-bin"
+echo "  sudo pacman -Syu claude-desktop-extra"
 echo ""
 echo "The -Syu is intentional: Arch does not support partial upgrades, so a"
 echo "package must always be installed together with a full system upgrade."

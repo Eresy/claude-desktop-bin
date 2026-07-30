@@ -1,6 +1,6 @@
 ---
 name: debug
-description: Debug a problem in claude-desktop-bin by pulling the right local evidence - the most recent local-agent-mode session transcript (your last prompt + the model's tool calls/errors) and the Claude Desktop logs - and asking you for anything else worth collecting for the specific issue. Invoke as "/debug <short description of what's broken>".
+description: Debug a problem in claude-desktop-extra by pulling the right local evidence - the most recent local-agent-mode session transcript (your last prompt + the model's tool calls/errors) and the Claude Desktop logs - and asking you for anything else worth collecting for the specific issue. Invoke as "/debug <short description of what's broken>".
 disable-model-invocation: true
 argument-hint: "<what is broken>"
 ---

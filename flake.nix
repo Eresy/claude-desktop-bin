@@ -1,5 +1,5 @@
 {
-  description = "Claude Desktop for Linux — unofficial package";
+  description = "Claude Desktop for Linux - unofficial package with extra features";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -23,6 +23,9 @@
             claude-code = null;
           };
           default = self.packages.${system}.claude-desktop;
+          # Alias under the new project name (claude-desktop-bin -> claude-desktop-extra
+          # relaunch); both attrs resolve to the same package.
+          claude-desktop-extra = self.packages.${system}.claude-desktop;
         };
       }
     );

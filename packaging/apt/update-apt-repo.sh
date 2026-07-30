@@ -46,10 +46,15 @@ mkdir -p "$REPO_DIR/deb/$DEB_ARCH"
 cp "$DEB_FILE" "$REPO_DIR/deb/$DEB_ARCH/"
 echo "Copied $DEB_BASENAME to deb/$DEB_ARCH/"
 
-# Prune old versions within this arch — keep only the latest 1
+# Prune old versions within this arch - keep only the latest 1 PER PACKAGE NAME
+# (the repo carries claude-desktop-extra plus the transitional claude-desktop-bin,
+# so pruning must group by the package-name part before the first underscore).
 cd "$REPO_DIR/deb/$DEB_ARCH"
 # shellcheck disable=SC2012
-ls -t *.deb 2>/dev/null | tail -n +2 | xargs -r rm -f
+for pkg_name in $(ls -1 *.deb 2>/dev/null | sed 's/_.*$//' | sort -u); do
+    # shellcheck disable=SC2012
+    ls -t "${pkg_name}"_*.deb 2>/dev/null | tail -n +2 | xargs -r rm -f
+done
 KEPT=$(ls -1 *.deb 2>/dev/null | wc -l)
 echo "Kept $KEPT .deb file(s) in $DEB_ARCH after pruning"
 

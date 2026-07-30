@@ -63,7 +63,7 @@ let
   # nixpkgs default diverges.
 in
 stdenvNoCC.mkDerivation {
-  pname = "claude-desktop-bin";
+  pname = "claude-desktop-extra";
   inherit version;
 
   src = fetchurl {

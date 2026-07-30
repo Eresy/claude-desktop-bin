@@ -1,6 +1,6 @@
-// claude-desktop-bin - local configuration (custom themes + feature-flag overrides)
+// claude-desktop-extra - local configuration (custom themes + feature-flag overrides)
 //
-// This .jsonc file is merged over claude-desktop-bin.json in the same directory
+// This .jsonc file is merged over claude-desktop-extra.json in the same directory
 // (per key; .jsonc wins) - an existing .json config keeps working unchanged.
 // Comments (// and /* */) are allowed in both files.
 //
@@ -13,7 +13,7 @@
 //
 // growthbookOverrides (advanced, unsupported territory):
 // The Extra > Features panel in the app's Settings dialog edits the same
-// flags with a switch per flag. It writes claude-desktop-bin.json; entries you
+// flags with a switch per flag. It writes claude-desktop-extra.json; entries you
 // put here win per flag id, and that panel shows those as locked.
 // Every GrowthBook flag observed being read from the feature store in Claude
 // Desktop v1.21459.0 is listed below, commented out. Uncomment a line to force
@@ -24,7 +24,7 @@
 // and account changes. That does NOT make a change take effect on its own -
 // most gated features are wired up while the app starts, so restart after
 // changing a flag. Overrides win over Anthropic's server rollout.
-// Flags force-enabled by claude-desktop-bin's binary patches
+// Flags force-enabled by claude-desktop-extra's binary patches
 // (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this
 // file entirely. Active overrides are logged to logs/claude-patches.log.
 // Flag IDs are Anthropic-internal and can vanish or change meaning in any

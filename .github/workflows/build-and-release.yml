@@ -372,7 +372,7 @@ jobs:
 
       - name: Guard docs flag catalog is in sync with the shipped template
         run: |
-          # docs/claude-desktop-bin.jsonc (linked from the README) must match the
+          # docs/claude-desktop-extra.jsonc (linked from the README) must match the
           # template add_growthbook_overrides writes on first launch, so the
           # browsable flag catalog cannot drift from what the app produces.
           bash scripts/check-jsonc-template-sync.sh
@@ -1270,7 +1270,7 @@ jobs:
                 set -e
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y /dist/claude-desktop-bin_*_arm64.deb
+                apt-get install -y /dist/claude-desktop-extra_*_arm64.deb
                 test -f /usr/lib/claude-desktop/claude
                 test -f /usr/lib/claude-desktop/resources/app.asar
                 test -x /usr/bin/claude-desktop
@@ -1286,7 +1286,7 @@ jobs:
                 set -e
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y xvfb /dist/claude-desktop-bin_*_amd64.deb
+                apt-get install -y xvfb /dist/claude-desktop-extra_*_amd64.deb
                 bash /scripts/smoke-test.sh \
                   /usr/lib/claude-desktop/claude
               "
@@ -1300,7 +1300,7 @@ jobs:
                 set -e
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y xvfb /dist/claude-desktop-bin_*_amd64.deb
+                apt-get install -y xvfb /dist/claude-desktop-extra_*_amd64.deb
                 test -f /usr/lib/claude-desktop/claude
                 test -f /usr/lib/claude-desktop/resources/app.asar
                 test -x /usr/bin/claude-desktop
@@ -1319,7 +1319,7 @@ jobs:
                 set -e
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y weston /dist/claude-desktop-bin_*_amd64.deb
+                apt-get install -y weston /dist/claude-desktop-extra_*_amd64.deb
                 export XDG_RUNTIME_DIR=/tmp/xdg-smoke
                 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
                 weston --backend=headless --socket=wayland-1 --idle-time=0 >/tmp/weston.log 2>&1 &
@@ -1335,7 +1335,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deb-${{ matrix.arch }}
-          path: dist/claude-desktop-bin_*_${{ matrix.arch }}.deb
+          path: dist/claude-desktop-extra_*_${{ matrix.arch }}.deb
+          retention-days: 1
+
+      # Transitional claude-desktop-bin dummy (rename migration). build-deb.sh
+      # produces the identical Architecture: all file on BOTH matrix runs, so
+      # only the amd64 run uploads it - one copy serves every arch.
+      # Retire this step with the rename transition window.
+      - name: Upload transitional deb artifact (amd64 build only)
+        if: matrix.arch == 'amd64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-transitional
+          path: dist/claude-desktop-bin_*_all.deb
+          if-no-files-found: error
           retention-days: 1
 
   # ================================================================
@@ -1405,7 +1418,7 @@ jobs:
               arm64v8/fedora:40 \
               bash -c "
                 set -e
-                dnf install -y /dist/claude-desktop-bin-*.aarch64.rpm
+                dnf install -y /dist/claude-desktop-extra-*.aarch64.rpm
                 test -f /usr/lib/claude-desktop/claude
                 test -f /usr/lib/claude-desktop/resources/app.asar
                 test -x /usr/bin/claude-desktop
@@ -1418,7 +1431,7 @@ jobs:
               fedora:40 \
               bash -c "
                 set -e
-                dnf install -y xorg-x11-server-Xvfb /dist/claude-desktop-bin-*.x86_64.rpm
+                dnf install -y xorg-x11-server-Xvfb /dist/claude-desktop-extra-*.x86_64.rpm
                 bash /scripts/smoke-test.sh \
                   /usr/lib/claude-desktop/claude
               "
@@ -1433,7 +1446,7 @@ jobs:
               rockylinux:9 \
               bash -c "
                 set -e
-                dnf install -y xorg-x11-server-Xvfb /dist/claude-desktop-bin-*.x86_64.rpm
+                dnf install -y xorg-x11-server-Xvfb /dist/claude-desktop-extra-*.x86_64.rpm
                 test -f /usr/lib/claude-desktop/claude
                 test -f /usr/lib/claude-desktop/resources/app.asar
                 test -x /usr/bin/claude-desktop
@@ -1446,7 +1459,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.arch }}
-          path: dist/claude-desktop-bin-*.${{ matrix.arch }}.rpm
+          path: dist/claude-desktop-extra-*.${{ matrix.arch }}.rpm
           retention-days: 1
 
   # ================================================================
@@ -1578,7 +1591,7 @@ jobs:
           path: |
             PKGBUILD
             .SRCINFO
-            claude-desktop-bin.install
+            claude-desktop-extra.install
           include-hidden-files: true
           retention-days: 1
 
@@ -1659,10 +1672,10 @@ jobs:
           fi
 
           # Copy everything into a staging dir for the Docker bind-mount.
-          # claude-desktop-bin.install must sit next to PKGBUILD (makepkg reads
+          # claude-desktop-extra.install must sit next to PKGBUILD (makepkg reads
           # the install= file relative to the PKGBUILD dir).
           mkdir -p /tmp/pkgbuild-test dist
-          cp PKGBUILD .SRCINFO claude-desktop-bin.install "$TARBALL" /tmp/pkgbuild-test/
+          cp PKGBUILD .SRCINFO claude-desktop-extra.install "$TARBALL" /tmp/pkgbuild-test/
 
           docker run --rm \
             --tmpfs /tmp/cross-device:exec,size=2g \
@@ -1733,7 +1746,7 @@ jobs:
               esac
               # `cat >/dev/null` drains the rest of the stream so bsdtar never
               # takes a SIGPIPE (which pipefail would turn into a build failure).
-              ELF_MACHINE=$(bsdtar -xOqf "$PKG" usr/lib/claude-desktop-bin/claude \
+              ELF_MACHINE=$(bsdtar -xOqf "$PKG" usr/lib/claude-desktop/claude \
                 | { od -An -tx1 -j18 -N2; cat >/dev/null; } | tr -d " \n")
               echo "  Electron binary ELF e_machine = 0x${ELF_MACHINE} (expected 0x${EXPECT_MACHINE})"
               if [ "$ELF_MACHINE" != "$EXPECT_MACHINE" ]; then
@@ -1751,7 +1764,7 @@ jobs:
               # Fail only on namcap errors (E:), not warnings (W:)
               # W: lines about implicitly satisfied deps, unstripped ELF, etc. are expected
               # for packages that bundle Electron binaries
-              if echo "$NAMCAP_OUT" | grep -qE "^claude-desktop-bin E:.*dependency"; then
+              if echo "$NAMCAP_OUT" | grep -qE "^claude-desktop-extra E:.*dependency"; then
                 echo "::error::namcap detected dependency errors in the built package"
                 exit 1
               fi
@@ -1830,7 +1843,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: arch-package-${{ matrix.arch }}
-          path: dist/claude-desktop-bin-*-${{ matrix.arch }}.pkg.tar.zst
+          path: dist/claude-desktop-extra-*-${{ matrix.arch }}.pkg.tar.zst
           # A silently empty artifact would let the release job advertise a
           # pacman repo with no package in it - fail instead.
           if-no-files-found: error
@@ -1879,28 +1892,33 @@ jobs:
           cp artifacts/appimage-aarch64/Claude_Desktop-*-aarch64.AppImage.zsync release-files/
 
           # DEBs
-          cp artifacts/deb-amd64/claude-desktop-bin_*_amd64.deb release-files/
-          cp artifacts/deb-arm64/claude-desktop-bin_*_arm64.deb release-files/
+          cp artifacts/deb-amd64/claude-desktop-extra_*_amd64.deb release-files/
+          cp artifacts/deb-arm64/claude-desktop-extra_*_arm64.deb release-files/
+          # Transitional claude-desktop-bin dummy (rename migration; uploaded by
+          # the amd64 build only). Published as a release asset and fed into the
+          # apt repo so existing installs migrate on a plain `apt upgrade`.
+          # Retire with the rename transition window.
+          cp artifacts/deb-transitional/claude-desktop-bin_*_all.deb release-files/
 
           # RPMs
-          cp artifacts/rpm-x86_64/claude-desktop-bin-*.x86_64.rpm release-files/
-          cp artifacts/rpm-aarch64/claude-desktop-bin-*.aarch64.rpm release-files/
+          cp artifacts/rpm-x86_64/claude-desktop-extra-*.x86_64.rpm release-files/
+          cp artifacts/rpm-aarch64/claude-desktop-extra-*.aarch64.rpm release-files/
 
           # PKGBUILD (+ the .install file it references via install=, + .SRCINFO).
           # Published as release assets: the AUR push that used to be their only
           # destination is gone, and users doing the `makepkg -si` fallback need
-          # PKGBUILD and claude-desktop-bin.install side by side.
+          # PKGBUILD and claude-desktop-extra.install side by side.
           cp artifacts/pkgbuild/PKGBUILD release-files/
           cp artifacts/pkgbuild/.SRCINFO release-files/
-          cp artifacts/pkgbuild/claude-desktop-bin.install release-files/
+          cp artifacts/pkgbuild/claude-desktop-extra.install release-files/
 
           # Arch packages: NOT copied into release-files/ here - the pacman
           # repository step below needs them in a separate input dir (the repo
           # script copies each package into its output dir itself), and that
           # output is what lands in release-files/. Checksums are computed from
           # the artifacts, which are byte-identical to what gets published.
-          PKG_X86_64=$(ls artifacts/arch-package-x86_64/claude-desktop-bin-*-x86_64.pkg.tar.zst)
-          PKG_AARCH64=$(ls artifacts/arch-package-aarch64/claude-desktop-bin-*-aarch64.pkg.tar.zst)
+          PKG_X86_64=$(ls artifacts/arch-package-x86_64/claude-desktop-extra-*-x86_64.pkg.tar.zst)
+          PKG_AARCH64=$(ls artifacts/arch-package-aarch64/claude-desktop-extra-*-aarch64.pkg.tar.zst)
           echo "pkg_x86_64_sha256=$(sha256sum "$PKG_X86_64" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "pkg_aarch64_sha256=$(sha256sum "$PKG_AARCH64" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
@@ -1911,10 +1929,10 @@ jobs:
           echo "tarball_aarch64_sha256=$(sha256sum release-files/claude-desktop-*-linux-aarch64.tar.gz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "appimage_x86_64_sha256=$(sha256sum release-files/Claude_Desktop-*-x86_64.AppImage | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "appimage_aarch64_sha256=$(sha256sum release-files/Claude_Desktop-*-aarch64.AppImage | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "deb_amd64_sha256=$(sha256sum release-files/claude-desktop-bin_*_amd64.deb | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "deb_arm64_sha256=$(sha256sum release-files/claude-desktop-bin_*_arm64.deb | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "rpm_x86_64_sha256=$(sha256sum release-files/claude-desktop-bin-*.x86_64.rpm | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "rpm_aarch64_sha256=$(sha256sum release-files/claude-desktop-bin-*.aarch64.rpm | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "deb_amd64_sha256=$(sha256sum release-files/claude-desktop-extra_*_amd64.deb | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "deb_arm64_sha256=$(sha256sum release-files/claude-desktop-extra_*_arm64.deb | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "rpm_x86_64_sha256=$(sha256sum release-files/claude-desktop-extra-*.x86_64.rpm | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "rpm_aarch64_sha256=$(sha256sum release-files/claude-desktop-extra-*.aarch64.rpm | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
           ls -la release-files/
 
@@ -1937,8 +1955,8 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
         run: |
           mkdir -p pacman-repo pacman-in
-          cp artifacts/arch-package-x86_64/claude-desktop-bin-*-x86_64.pkg.tar.zst pacman-in/
-          cp artifacts/arch-package-aarch64/claude-desktop-bin-*-aarch64.pkg.tar.zst pacman-in/
+          cp artifacts/arch-package-x86_64/claude-desktop-extra-*-x86_64.pkg.tar.zst pacman-in/
+          cp artifacts/arch-package-aarch64/claude-desktop-extra-*-aarch64.pkg.tar.zst pacman-in/
 
           if [ -z "$GPG_PRIVATE_KEY" ]; then
             # Same warn-and-skip convention as the APT deploy below. But a
@@ -2006,8 +2024,12 @@ jobs:
           # back `pacman -F`. Release assets cannot be symlinks (GitHub uploads
           # the link target's bytes only if it is a real file), so repo-add's
           # usual .db -> .db.tar.gz symlinks must have been materialised.
+          # Both db name sets must exist: claude-desktop-extra* is the live
+          # repo, claude-desktop-bin* are the LEGACY_DB_ALIAS byte-copies that
+          # keep pre-rename [claude-desktop-bin] pacman.conf sections working.
+          # Retire the legacy pair with the rename transition window.
           FAILED=0
-          for REPO_NAME in claude-desktop-bin claude-desktop-bin-aarch64; do
+          for REPO_NAME in claude-desktop-extra claude-desktop-extra-aarch64 claude-desktop-bin claude-desktop-bin-aarch64; do
             for SUFFIX in db db.sig files files.sig; do
               F="pacman-repo/${REPO_NAME}.${SUFFIX}"
               if [ ! -f "$F" ] || [ -L "$F" ]; then
@@ -2015,6 +2037,9 @@ jobs:
                 FAILED=1
               fi
             done
+            # Companion .tar.gz variants exist only for the live repo names -
+            # the LEGACY_DB_ALIAS copies deliberately alias .db/.files alone.
+            case "$REPO_NAME" in claude-desktop-bin*) continue ;; esac
             for SUFFIX in db.tar.gz db.tar.gz.sig files.tar.gz files.tar.gz.sig; do
               F="pacman-repo/${REPO_NAME}.${SUFFIX}"
               if [ ! -f "$F" ] || [ -L "$F" ]; then
@@ -2083,44 +2108,44 @@ jobs:
             **Arch Linux (pacman Repository - recommended)**
             ```bash
             curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
-            sudo pacman -Syu claude-desktop-bin
+            sudo pacman -Syu claude-desktop-extra
             ```
             ${{ steps.pacman.outputs.repo_available != 'true' && '> **NOTE:** this release ships NO signed pacman database (no signing key was available to the build), so the repository above will not serve it. Use the manual `pacman -U` command below instead.' || '' }}
 
             **Arch Linux (manual package)**
             ```bash
             # x86_64
-            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-x86_64.pkg.tar.zst
+            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-extra-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-x86_64.pkg.tar.zst
             # ARM64
-            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-aarch64.pkg.tar.zst
+            sudo pacman -U https://github.com/${{ github.repository }}/releases/download/${{ needs.check-version.outputs.tag }}/claude-desktop-extra-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}-aarch64.pkg.tar.zst
             ```
 
             **Debian/Ubuntu (APT Repository — recommended)**
             ```bash
             curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
-            sudo apt install claude-desktop-bin
+            sudo apt install claude-desktop-extra
             ```
 
             **Debian/Ubuntu (manual .deb)**
             ```bash
             # x86_64
-            sudo apt install ./claude-desktop-bin_${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}_amd64.deb
+            sudo apt install ./claude-desktop-extra_${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}_amd64.deb
             # ARM64
-            sudo apt install ./claude-desktop-bin_${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}_arm64.deb
+            sudo apt install ./claude-desktop-extra_${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}_arm64.deb
             ```
 
             **Fedora/RHEL (RPM Repository — recommended)**
             ```bash
             curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
-            sudo dnf install claude-desktop-bin
+            sudo dnf install claude-desktop-extra
             ```
 
             **Fedora/RHEL (manual .rpm)**
             ```bash
             # x86_64
-            sudo dnf install ./claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}.x86_64.rpm
+            sudo dnf install ./claude-desktop-extra-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}.x86_64.rpm
             # ARM64
-            sudo dnf install ./claude-desktop-bin-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}.aarch64.rpm
+            sudo dnf install ./claude-desktop-extra-${{ needs.check-version.outputs.version }}-${{ needs.check-version.outputs.pkgrel }}.aarch64.rpm
             ```
 
             **NixOS / Nix**
@@ -2177,12 +2202,12 @@ jobs:
           PKGREL: ${{ needs.check-version.outputs.pkgrel }}
           REPO: ${{ github.repository }}
         run: |
-          DEB_FILE_AMD64="$(pwd)/release-files/claude-desktop-bin_${VERSION}-${PKGREL}_amd64.deb"
-          DEB_FILE_ARM64="$(pwd)/release-files/claude-desktop-bin_${VERSION}-${PKGREL}_arm64.deb"
-          RPM_FILE_X86_64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}.x86_64.rpm"
-          RPM_FILE_AARCH64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}.aarch64.rpm"
-          PKG_FILE_X86_64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}-x86_64.pkg.tar.zst"
-          PKG_FILE_AARCH64="$(pwd)/release-files/claude-desktop-bin-${VERSION}-${PKGREL}-aarch64.pkg.tar.zst"
+          DEB_FILE_AMD64="$(pwd)/release-files/claude-desktop-extra_${VERSION}-${PKGREL}_amd64.deb"
+          DEB_FILE_ARM64="$(pwd)/release-files/claude-desktop-extra_${VERSION}-${PKGREL}_arm64.deb"
+          RPM_FILE_X86_64="$(pwd)/release-files/claude-desktop-extra-${VERSION}-${PKGREL}.x86_64.rpm"
+          RPM_FILE_AARCH64="$(pwd)/release-files/claude-desktop-extra-${VERSION}-${PKGREL}.aarch64.rpm"
+          PKG_FILE_X86_64="$(pwd)/release-files/claude-desktop-extra-${VERSION}-${PKGREL}-x86_64.pkg.tar.zst"
+          PKG_FILE_AARCH64="$(pwd)/release-files/claude-desktop-extra-${VERSION}-${PKGREL}-aarch64.pkg.tar.zst"
 
           if [ -z "$GPG_PRIVATE_KEY" ]; then
             echo "::warning::APT_GPG_PRIVATE_KEY secret not set — skipping repo deploy"
@@ -2281,7 +2306,11 @@ jobs:
           }
           BADGE_EOF
 
-          for DEB_FILE in "$DEB_FILE_AMD64" "$DEB_FILE_ARM64"; do
+          # The transitional claude-desktop-bin dummy goes through the same
+          # assembly so it enters the Packages index (deb/all/) and existing
+          # installs migrate on `apt upgrade`. Retire with the transition window.
+          DEB_FILE_TRANSITIONAL="$(pwd)/release-files/claude-desktop-bin_${VERSION}-${PKGREL}_all.deb"
+          for DEB_FILE in "$DEB_FILE_AMD64" "$DEB_FILE_ARM64" "$DEB_FILE_TRANSITIONAL"; do
             if [ -f "$DEB_FILE" ]; then
               bash packaging/apt/update-apt-repo.sh "$DEB_FILE" "$REPO_DIR" "$GPG_KEY_ID"
             else
@@ -2401,10 +2430,10 @@ jobs:
           VERSION: ${{ needs.check-version.outputs.version }}
           PKGREL: ${{ needs.check-version.outputs.pkgrel }}
         run: |
-          sed -i -E "s/claude-desktop-bin_[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?_amd64\.deb/claude-desktop-bin_${VERSION}-${PKGREL}_amd64.deb/g" README.md
-          sed -i -E "s/claude-desktop-bin_[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?_arm64\.deb/claude-desktop-bin_${VERSION}-${PKGREL}_arm64.deb/g" README.md
-          sed -i -E "s/claude-desktop-bin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.x86_64\.rpm/claude-desktop-bin-${VERSION}-${PKGREL}.x86_64.rpm/g" README.md
-          sed -i -E "s/claude-desktop-bin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.aarch64\.rpm/claude-desktop-bin-${VERSION}-${PKGREL}.aarch64.rpm/g" README.md
+          sed -i -E "s/claude-desktop-extra_[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?_amd64\.deb/claude-desktop-extra_${VERSION}-${PKGREL}_amd64.deb/g" README.md
+          sed -i -E "s/claude-desktop-extra_[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?_arm64\.deb/claude-desktop-extra_${VERSION}-${PKGREL}_arm64.deb/g" README.md
+          sed -i -E "s/claude-desktop-extra-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.x86_64\.rpm/claude-desktop-extra-${VERSION}-${PKGREL}.x86_64.rpm/g" README.md
+          sed -i -E "s/claude-desktop-extra-[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?\.aarch64\.rpm/claude-desktop-extra-${VERSION}-${PKGREL}.aarch64.rpm/g" README.md
           sed -i -E "s/Claude_Desktop-[0-9]+\.[0-9]+\.[0-9]+-x86_64\.AppImage/Claude_Desktop-${VERSION}-x86_64.AppImage/g" README.md
           sed -i -E "s/Claude_Desktop-[0-9]+\.[0-9]+\.[0-9]+-aarch64\.AppImage/Claude_Desktop-${VERSION}-aarch64.AppImage/g" README.md
 
