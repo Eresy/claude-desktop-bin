@@ -33,6 +33,8 @@ fix_computer_use_linux: \
 
 fix_cowork_font: ../js/fix_cowork_font.js
 
+fix_epitaxy_autoscroll: ../js/fix_epitaxy_autoscroll.js
+
 # Theme patch embeds the spinner-reshape installer (swaps the loading-star SVG
 # for the active theme's custom shape) and the bundled community + gaming palette
 # collections via staticRead.
