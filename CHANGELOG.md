@@ -2,7 +2,17 @@
 
 All notable changes to the claude-desktop-bin packages will be documented in this file.
 
-## 2026-07-29
+## 2026-07-30
+
+### The Code and Cowork transcript follows a running response again
+
+Watching Claude work meant grabbing the mouse. Partway through a response the transcript would stop following the output and simply stay where it was, and nothing brought it back except scrolling down by hand. In the floating side chat it was worse - that viewport is a few hundred pixels tall, so once it fell behind, the part you wanted to read was always off-screen.
+
+The cause is how narrow claude.ai's own test is. Its transcript scroller decides whether to keep itself at the bottom by watching a 1px sentinel element with an `IntersectionObserver`, and it sets `overflow-anchor: none`, so the browser's own scroll anchoring does not step in either. Being at the bottom therefore means being at it exactly. Measured in a live session: park the transcript at the bottom, move `scrollTop` up by **3 pixels**, and it never follows again - content grew from 1280 to 3080 pixels while the scroll position stayed frozen at 641, stranding the view 1803 pixels behind the output. A 3px drift is not an edge case during streaming; sub-pixel layout, `scrollbar-gutter: stable both-edges`, a font finishing loading and `[contain:strict]` reflow all produce one.
+
+`fix_epitaxy_autoscroll.nim` attaches our own stick-to-bottom to the transcript scrollers in both surfaces. It treats a band of a few lines as "at the bottom" rather than a single pixel, re-asserts the position on every content resize and mutation, and gives up following the moment you scroll up on purpose - wheel, touch and <kbd>PageUp</kbd>/<kbd>Home</kbd>/<kbd>↑</kbd> unpin synchronously, so a message arriving in the same frame as your gesture cannot yank you back down. Scroll back to the bottom and it resumes on its own.
+
+This markup belongs to the remote claude.ai SPA rather than to the bundle we patch, so a claude.ai deploy can rename the anchors it keys on. It fails soft when that happens: the sweep finds nothing and the view behaves exactly as it does today.
 
 ### 84 community color palettes now ship with the package
 
