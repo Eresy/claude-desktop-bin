@@ -14,6 +14,8 @@ The cause is how narrow claude.ai's own test is. Its transcript scroller decides
 
 This markup belongs to the remote claude.ai SPA rather than to the bundle we patch, so a claude.ai deploy can rename the anchors it keys on. It fails soft when that happens: the sweep finds nothing and the view behaves exactly as it does today.
 
+Contributed by [@Felitendo](https://github.com/Felitendo) ([#209](https://github.com/patrickjaja/claude-desktop-bin/pull/209)) - thanks!
+
 ### 84 community color palettes now ship with the package
 
 Alongside the seven curated built-in themes, the theme patch now bundles 84 palettes converted from the [Noctalia community-palettes](https://github.com/noctalia-dev/community-palettes) collection - Rose Pine, Gruvbox, Everforest, Kanagawa, Solarized, Tokyo Night, the Catppuccin accent variants and many more. Each one is a full dual light/dark token set, so `"activeTheme": "rose-pine-moon"` is all a config needs and Claude's own light/dark toggle keeps working. Theme resolution order is your own `themes` entries first, then the built-ins, then the community palettes, so a theme you author under the same slug replaces the bundled one instead of colliding with it.
