@@ -4,7 +4,7 @@
 # Ubuntu/Debian ship ydotool 0.1.8 which is incompatible with Claude Desktop's
 # Computer Use. This script builds v1.0.4 from source and configures the daemon.
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/patrickjaja/claude-desktop-bin/master/scripts/setup-ydotool.sh | sudo bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/patrickjaja/claude-desktop-extra/master/scripts/setup-ydotool.sh | sudo bash
 
 set -euo pipefail
 

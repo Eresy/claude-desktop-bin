@@ -4,7 +4,7 @@
 
 On some systems (reported on Nobara 43/KDE with AMD RDNA3 and Fedora 44/GNOME with
 Intel Xe, both on kernel 7.0.x and Mesa 26.1 -
-[#180](https://github.com/patrickjaja/claude-desktop-bin/issues/180)),
+[#180](https://github.com/patrickjaja/claude-desktop-extra/issues/180)),
 Electron 42's GPU process repeatedly fails to launch under native Wayland and the
 app self-terminates. Terminal signature:
 
@@ -40,7 +40,7 @@ the user explicitly approves a notification/dialog at the moment Claude first
 calls `BindShortcuts`. In practice the notification is easy to miss, and
 Electron's `globalShortcut.register()` returns `true` whether or not the
 approval went through — so the hotkey silently doesn't fire and the symptom
-is "only works when Claude has focus" (issue [#38](https://github.com/patrickjaja/claude-desktop-bin/issues/38)).
+is "only works when Claude has focus" (issue [#38](https://github.com/patrickjaja/claude-desktop-extra/issues/38)).
 
 The reliable fix on GNOME is to bind a GNOME custom keybinding directly to
 `claude-desktop --toggle` — a CLI trigger that toggles Quick Entry via a Unix

@@ -2107,7 +2107,7 @@ jobs:
 
             **Arch Linux (pacman Repository - recommended)**
             ```bash
-            curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+            curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-pacman.sh | sudo bash
             sudo pacman -Syu claude-desktop-extra
             ```
             ${{ steps.pacman.outputs.repo_available != 'true' && '> **NOTE:** this release ships NO signed pacman database (no signing key was available to the build), so the repository above will not serve it. Use the manual `pacman -U` command below instead.' || '' }}
@@ -2122,7 +2122,7 @@ jobs:
 
             **Debian/Ubuntu (APT Repository — recommended)**
             ```bash
-            curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
+            curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install.sh | sudo bash
             sudo apt install claude-desktop-extra
             ```
 
@@ -2136,7 +2136,7 @@ jobs:
 
             **Fedora/RHEL (RPM Repository — recommended)**
             ```bash
-            curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
+            curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-rpm.sh | sudo bash
             sudo dnf install claude-desktop-extra
             ```
 
@@ -2150,7 +2150,7 @@ jobs:
 
             **NixOS / Nix**
             ```bash
-            nix run github:patrickjaja/claude-desktop-bin
+            nix run github:patrickjaja/claude-desktop-extra
             ```
 
             **AppImage (Any Distro)**
@@ -2193,6 +2193,40 @@ jobs:
           prerelease: false
           make_latest: ${{ needs.check-version.outputs.make_latest }}
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── LEGACY MIRROR (retire with the rename transition window) ────────
+      # The stub repo claude-desktop-bin must keep serving the cohorts that
+      # still point at the pre-rename URLs: pacman Server= lines fetch
+      # /releases/latest/download/claude-desktop-bin.db plus the package
+      # files, and already-shipped AppImages zsync-update from
+      # |claude-desktop-bin|latest|. Mirror the EXACT same asset set as the
+      # release above (release-files/* plus the dot-file .SRCINFO).
+      # continue-on-error: a mirror hiccup must never block the main repo's
+      # APT deploy / README commit steps that follow in this job.
+      - name: Mirror release to legacy claude-desktop-bin repo
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.LEGACY_MIRROR_TOKEN }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+          RELEASE_NAME: ${{ needs.check-version.outputs.release_name }}
+          MAKE_LATEST: ${{ needs.check-version.outputs.make_latest }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "LEGACY_MIRROR_TOKEN not set - legacy release mirror disabled, skipping"
+            exit 0
+          fi
+          LEGACY_REPO="patrickjaja/claude-desktop-bin"
+          if ! gh release view "$TAG" -R "$LEGACY_REPO" > /dev/null 2>&1; then
+            gh release create "$TAG" -R "$LEGACY_REPO" \
+              --target main \
+              --title "${RELEASE_NAME} (legacy mirror)" \
+              --latest="${MAKE_LATEST:-true}" \
+              --notes "Legacy mirror of https://github.com/${REPO}/releases/tag/${TAG}. The project was renamed to claude-desktop-extra - see https://github.com/${REPO} for the release notes and migration guide. This mirror keeps pre-rename pacman/AppImage installs updating during the transition window."
+          fi
+          gh release upload "$TAG" -R "$LEGACY_REPO" --clobber \
+            release-files/* release-files/.SRCINFO
+          echo "Mirrored $(ls release-files | wc -l) assets (+ .SRCINFO) to ${LEGACY_REPO}@${TAG}"
 
       - name: Deploy APT Repository and static files
         env:
@@ -2471,10 +2505,57 @@ jobs:
             git push origin master
           }
 
+      # ── AUR publish ─────────────────────────────────────────────────
+      # Pushes the release's PKGBUILD to the claude-desktop-extra AUR
+      # package (fresh AUR repo created by the first push - the old
+      # claude-desktop-bin AUR package was deleted and must never be
+      # re-created). Runs last in the job: everything critical (release,
+      # repos, README/nix commit) is already published by now.
+      - name: Setup SSH for AUR
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
+          printf '%s\n' \
+            "Host aur.archlinux.org" \
+            "  User aur" \
+            "  IdentityFile ~/.ssh/aur" \
+            "  StrictHostKeyChecking no" \
+            >> ~/.ssh/config
+
+      - name: Push to AUR
+        env:
+          AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
+          AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
+          VERSION: ${{ needs.check-version.outputs.version }}
+          PKGREL: ${{ needs.check-version.outputs.pkgrel }}
+        run: |
+          git config --global user.name "$AUR_USERNAME"
+          git config --global user.email "$AUR_EMAIL"
+
+          git clone ssh://aur@aur.archlinux.org/claude-desktop-extra.git aur-repo
+
+          # PKGBUILD's install= points at claude-desktop-extra.install; ship
+          # it so users' makepkg finds it. All three files are staged in
+          # release-files/ by the Organize step (and were published as
+          # release assets by the same job, so they cannot drift).
+          cp release-files/PKGBUILD release-files/.SRCINFO \
+             release-files/claude-desktop-extra.install aur-repo/
+
+          cd aur-repo
+          git add PKGBUILD .SRCINFO claude-desktop-extra.install
+          git diff --staged --quiet || {
+            git commit -m "Update to ${VERSION}-${PKGREL}"
+            git push origin master
+            echo "Successfully pushed claude-desktop-extra to AUR"
+          }
+
       - name: Cleanup
         if: always()
         run: |
-          rm -rf release-files artifacts pacman-repo pacman-in /tmp/pacman-gpg
+          rm -rf release-files artifacts pacman-repo pacman-in /tmp/pacman-gpg aur-repo ~/.ssh/aur
 
   # ================================================================
   # RPM Repository — runs on Fedora for native rpm-sign support
@@ -2562,6 +2643,33 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # ================================================================
+  # Job 6b: LEGACY MIRROR (retire with the rename transition window)
+  # Tells the stub repo claude-desktop-bin to re-deploy its Pages copy
+  # (the apt/dnf repos under the pre-rename
+  # patrickjaja.github.io/claude-desktop-bin/ URLs) from this run's
+  # github-pages artifact. The stub's mirror-pages.yml workflow does the
+  # actual deploy. Runs only after deploy-pages succeeded, so the stub
+  # never serves something the main site does not.
+  # ================================================================
+  trigger-legacy-pages-mirror:
+    needs: [deploy-pages]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch mirror-pages in claude-desktop-bin
+        env:
+          GH_TOKEN: ${{ secrets.LEGACY_MIRROR_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "LEGACY_MIRROR_TOKEN not set - legacy Pages mirror disabled, skipping"
+            exit 0
+          fi
+          gh api "repos/patrickjaja/claude-desktop-bin/dispatches" \
+            -f event_type=mirror-pages \
+            -F "client_payload[run_id]=${RUN_ID}"
+          echo "Dispatched mirror-pages for run ${RUN_ID}"
 
   # ================================================================
   # Job 7: Validate Nix package builds from GitHub Releases

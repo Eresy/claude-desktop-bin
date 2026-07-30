@@ -124,9 +124,6 @@ fi
 
 # Create AppRun (delegates to full launcher with AppImage-specific path overrides)
 log_info "Creating AppRun..."
-# PHASE-2 FLIP POINT (claude-desktop-extra relaunch): the manual-update URL
-# inside this AppRun heredoc still names the old repo; switch it after the
-# GitHub rename (the old URL keeps redirecting meanwhile).
 cat > "$APPDIR/AppRun" << 'EOF'
 #!/bin/bash
 SELF=$(readlink -f "$0")
@@ -154,7 +151,7 @@ if [ "$1" = "--appimage-update" ]; then
     else
         echo "appimageupdatetool not found."
         echo "Install it from: https://github.com/AppImageCommunity/AppImageUpdate"
-        echo "Or update manually: https://github.com/patrickjaja/claude-desktop-bin/releases/latest"
+        echo "Or update manually: https://github.com/patrickjaja/claude-desktop-extra/releases/latest"
         exit 1
     fi
 fi
@@ -237,11 +234,10 @@ if [ "$APPIMAGE_ARCH" != "$HOST_ARCH" ]; then
     RUNTIME_FLAG="--runtime-file $RUNTIME_FILE"
 fi
 
-# Embed update information for AppImage delta updates (gh-releases-zsync transport)
-# PHASE-2 FLIP POINT (claude-desktop-extra relaunch): change the repo segment to
-# claude-desktop-extra after the GitHub rename. Until then it must stay on the old
-# name - already-shipped AppImages resolve updates through this repo path.
-UPDATE_INFO="gh-releases-zsync|patrickjaja|claude-desktop-bin|latest|Claude_Desktop-*-${APPIMAGE_ARCH}.AppImage.zsync"
+# Embed update information for AppImage delta updates (gh-releases-zsync transport).
+# AppImages shipped before the claude-desktop-extra rename resolve updates through
+# the old claude-desktop-bin repo path - the legacy mirror serves them there.
+UPDATE_INFO="gh-releases-zsync|patrickjaja|claude-desktop-extra|latest|Claude_Desktop-*-${APPIMAGE_ARCH}.AppImage.zsync"
 log_info "Embedding update info: $UPDATE_INFO"
 
 if ! command -v zsyncmake &> /dev/null; then

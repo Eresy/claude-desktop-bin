@@ -11,11 +11,11 @@ allowed-tools: Bash(gh workflow run *), Bash(gh run list *), Bash(gh run view *)
 Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = decide automatically).
 
 ## Context
-- Repo: `patrickjaja/claude-desktop-bin` · Workflow: `build-and-release.yml` · default branch: `master`.
+- Repo: `patrickjaja/claude-desktop-extra` · Workflow: `build-and-release.yml` · default branch: `master`.
 - Current branch: !`git -C /home/patrickjaja/development/claude-desktop-bin branch --show-current`
 - Tracked upstream version: !`cat /home/patrickjaja/development/claude-desktop-bin/.upstream-version 2>/dev/null`
-- Last release: !`gh -R patrickjaja/claude-desktop-bin release list --limit 1 2>/dev/null || echo "(gh not ready)"`
-- Recent runs: !`gh -R patrickjaja/claude-desktop-bin run list --workflow=build-and-release.yml --limit 3 2>/dev/null || echo "(gh not ready)"`
+- Last release: !`gh -R patrickjaja/claude-desktop-extra release list --limit 1 2>/dev/null || echo "(gh not ready)"`
+- Recent runs: !`gh -R patrickjaja/claude-desktop-extra run list --workflow=build-and-release.yml --limit 3 2>/dev/null || echo "(gh not ready)"`
 
 ## Versioning semantics (format: `{upstream}-{pkgrel}`)
 - **New upstream version** (`.upstream-version` was bumped by `/update`): pkgrel resets to **1** automatically. This is the plain non-force run.
@@ -33,14 +33,14 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
 3. Print a one-line plan including the classification, e.g. "Triggering build-and-release.yml on `master` (force_rebuild=true - packaging-only update, pkgrel will bump)". Mention the classification so the CHANGELOG/release notes wording can say "payload update" vs "packaging-only".
 4. Fire it (no interactive confirmation - the user already typed /deploy):
    ```bash
-   gh -R patrickjaja/claude-desktop-bin workflow run build-and-release.yml -f force_rebuild=<FORCE>
+   gh -R patrickjaja/claude-desktop-extra workflow run build-and-release.yml -f force_rebuild=<FORCE>
    ```
 5. Wait ~3s, then resolve the run and report its URL:
    ```bash
-   gh -R patrickjaja/claude-desktop-bin run list --workflow=build-and-release.yml --limit 1 \
+   gh -R patrickjaja/claude-desktop-extra run list --workflow=build-and-release.yml --limit 1 \
      --json databaseId,url,status,event,createdAt
    ```
-   Report the run URL and status. Offer: "Watch with `gh -R patrickjaja/claude-desktop-bin run watch <id>`".
+   Report the run URL and status. Offer: "Watch with `gh -R patrickjaja/claude-desktop-extra run watch <id>`".
 
 ## Notes
 - Do NOT bump versions or edit files here - this only triggers the pipeline. Version/patch work belongs in `/update`.

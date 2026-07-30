@@ -67,7 +67,7 @@ stdenvNoCC.mkDerivation {
   inherit version;
 
   src = fetchurl {
-    url = "https://github.com/patrickjaja/claude-desktop-bin/releases/download/v${version}/claude-desktop-${version}-linux.tar.gz";
+    url = "https://github.com/patrickjaja/claude-desktop-extra/releases/download/v${version}/claude-desktop-${version}-linux.tar.gz";
     inherit hash;
   };
 

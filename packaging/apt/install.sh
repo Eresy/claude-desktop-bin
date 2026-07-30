@@ -1,11 +1,11 @@
 #!/bin/bash
 # install.sh — Set up the Claude Desktop APT repository
 #
-# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
+# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install.sh | sudo bash
 
 set -euo pipefail
 
-REPO_URL="https://patrickjaja.github.io/claude-desktop-bin"
+REPO_URL="https://patrickjaja.github.io/claude-desktop-extra"
 KEYRING_PATH="/etc/apt/keyrings/claude-desktop.gpg"
 SOURCES_PATH="/etc/apt/sources.list.d/claude-desktop.sources"
 OLD_LIST="/etc/apt/sources.list.d/claude-desktop.list"

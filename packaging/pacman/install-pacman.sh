@@ -1,12 +1,12 @@
 #!/bin/bash
 # install-pacman.sh - Set up the Claude Desktop pacman repository
 #
-# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-pacman.sh | sudo bash
 
 set -euo pipefail
 
-PAGES_URL="https://patrickjaja.github.io/claude-desktop-bin"
-SERVER_URL="https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download"
+PAGES_URL="https://patrickjaja.github.io/claude-desktop-extra"
+SERVER_URL="https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download"
 PACMAN_CONF="/etc/pacman.conf"
 BACKUP_PATH="/etc/pacman.conf.claude-desktop.bak"
 MARKER="# Added by install-pacman.sh - Claude Desktop repository"

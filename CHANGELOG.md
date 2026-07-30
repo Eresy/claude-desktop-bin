@@ -18,6 +18,14 @@ Upgrades are automatic on every distro:
 
 Version numbers keep their `{upstream}-{pkgrel}` format. The `/deploy` skill now documents the rule (new upstream version resets pkgrel to 1; any re-release at the same upstream bumps it) and decides `force_rebuild` itself from what actually changed since the last release.
 
+### The GitHub repository moved - and a compatibility mirror keeps old installs working
+
+The repository is now [github.com/patrickjaja/claude-desktop-extra](https://github.com/patrickjaja/claude-desktop-extra); every documented URL follows it. The old `claude-desktop-bin` repository stays in place as a compatibility mirror for the transition: its Pages keep serving the APT and DNF repositories at the pre-rename URLs, its releases mirror the new repository's assets (so pre-rename pacman sections and AppImage self-updates keep resolving), and its flake re-exports the new one (so `github:patrickjaja/claude-desktop-bin` inputs keep evaluating). Upgrading migrates the APT/DNF repo configuration to the new URLs automatically; pacman users get the new stanza printed once. The mirror is fed by CI on every release and will be retired after the transition window.
+
+### claude-desktop-extra is on the AUR
+
+CI publishes the release PKGBUILD to the [`claude-desktop-extra`](https://aur.archlinux.org/packages/claude-desktop-extra) AUR package on every release, so `yay -S claude-desktop-extra` works alongside the signed pacman repo (which remains the recommended path).
+
 ### The Code and Cowork transcript follows a running response again
 
 Watching Claude work meant grabbing the mouse. Partway through a response the transcript would stop following the output and simply stay where it was, and nothing brought it back except scrolling down by hand. In the floating side chat it was worse - that viewport is a few hundred pixels tall, so once it fell behind, the part you wanted to read was always off-screen.

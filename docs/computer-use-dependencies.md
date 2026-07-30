@@ -32,7 +32,7 @@ sudo dnf install ydotool && sudo systemctl enable --now ydotool  # Fedora
 
 Ubuntu/Debian ship an incompatible v0.1.8 - build v1.0.4 with the setup script:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/patrickjaja/claude-desktop-bin/master/scripts/setup-ydotool.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/patrickjaja/claude-desktop-extra/master/scripts/setup-ydotool.sh | sudo bash
 ```
 
 <a id="nixos"></a>

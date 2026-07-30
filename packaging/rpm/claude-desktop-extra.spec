@@ -219,6 +219,13 @@ REPO_FILE="/etc/yum.repos.d/claude-desktop.repo"
 if [ -f "$REPO_FILE" ] && ! grep -q '^metadata_expire=' "$REPO_FILE"; then
     echo 'metadata_expire=300' >> "$REPO_FILE"
 fi
+# Rename migration (retire with the transition window): point a repo config
+# still on the pre-rename Pages URL (baseurl + gpgkey) at the new repository.
+# Guarded and idempotent - must never fail the rpm transaction.
+if [ -f "$REPO_FILE" ] && grep -q 'patrickjaja.github.io/claude-desktop-bin/' "$REPO_FILE" 2>/dev/null; then
+    sed -i 's|patrickjaja.github.io/claude-desktop-bin/|patrickjaja.github.io/claude-desktop-extra/|g' "$REPO_FILE" 2>/dev/null || :
+    echo "claude-desktop-extra: migrated DNF repo config to the new repository URL" || :
+fi
 
 %postun
 # Remove the AppArmor profile on full uninstall ($1 == 0), not on upgrade.

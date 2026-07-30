@@ -34,7 +34,7 @@ fi
 
 # GITHUB_REPOSITORY is set by CI (owner/repo) and auto-flips when the GitHub
 # repository is renamed; the default stays the current name for local runs.
-GITHUB_REPO="${GITHUB_REPOSITORY:-patrickjaja/claude-desktop-bin}"
+GITHUB_REPO="${GITHUB_REPOSITORY:-patrickjaja/claude-desktop-extra}"
 if [ -z "$DOWNLOAD_URL" ]; then
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/claude-desktop-${VERSION}-linux.tar.gz"
 fi

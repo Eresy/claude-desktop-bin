@@ -1,15 +1,15 @@
 # Claude Desktop for Linux
 
-[![Claude Desktop](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/version-check.json)](https://claude.ai/download)
-[![Build & Release](https://github.com/patrickjaja/claude-desktop-bin/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/patrickjaja/claude-desktop-bin/actions/workflows/build-and-release.yml)
-[![Website](https://img.shields.io/badge/Website-Landing_Page-a78bfa?logo=github)](https://patrickjaja.github.io/claude-desktop-bin/)
+[![Claude Desktop](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/version-check.json)](https://claude.ai/download)
+[![Build & Release](https://github.com/patrickjaja/claude-desktop-extra/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/patrickjaja/claude-desktop-extra/actions/workflows/build-and-release.yml)
+[![Website](https://img.shields.io/badge/Website-Landing_Page-a78bfa?logo=github)](https://patrickjaja.github.io/claude-desktop-extra/)
 [![Reddit](https://img.shields.io/badge/Reddit-Discussion-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/ClaudeAI/comments/1r871b0/claude_desktop_on_linux_chat_cowork_code/)
 
-[![Pacman repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/pacman-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#arch-linux--manjaro-pacman-repository)
-[![APT repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/apt-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#debian--ubuntu-apt-repository)
-[![RPM repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/rpm-repo.json)](https://github.com/patrickjaja/claude-desktop-bin#fedora--rhel-dnf-repository)
-[![AppImage](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/appimage.json)](https://github.com/patrickjaja/claude-desktop-bin#appimage-any-distro)
-[![Nix flake](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-bin/badges/nix.json)](https://github.com/patrickjaja/claude-desktop-bin#nixos--nix)
+[![Pacman repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/pacman-repo.json)](https://github.com/patrickjaja/claude-desktop-extra#arch-linux--manjaro-pacman-repository)
+[![APT repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/apt-repo.json)](https://github.com/patrickjaja/claude-desktop-extra#debian--ubuntu-apt-repository)
+[![RPM repo](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/rpm-repo.json)](https://github.com/patrickjaja/claude-desktop-extra#fedora--rhel-dnf-repository)
+[![AppImage](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/appimage.json)](https://github.com/patrickjaja/claude-desktop-extra#appimage-any-distro)
+[![Nix flake](https://img.shields.io/endpoint?url=https://patrickjaja.github.io/claude-desktop-extra/badges/nix.json)](https://github.com/patrickjaja/claude-desktop-extra#nixos--nix)
 
 **Anthropic's official Claude Desktop Linux build, repackaged for the distros Anthropic doesn't ship - plus Linux-only extras.**
 
@@ -55,13 +55,21 @@ Pick your distro below. [Computer Use](#computer-use) works out of the box every
 ### Arch Linux / Manjaro (Pacman Repository)
 ```bash
 # Add repository + import signing key (one-time setup)
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-pacman.sh | sudo bash
+curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-pacman.sh | sudo bash
 
 # Install (also brings the system up to date, as Arch requires)
 sudo pacman -Syu claude-desktop-extra
 ```
 
 `-Syu` is deliberate: Arch only supports fully-upgraded systems, so installing from a freshly synced repo and upgrading happen in one step. Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
+
+**Alternative: AUR.** The same PKGBUILD is published as [`claude-desktop-extra`](https://aur.archlinux.org/packages/claude-desktop-extra) on the AUR, updated by CI on every release:
+
+```bash
+yay -S claude-desktop-extra
+```
+
+The AUR build downloads the pre-patched release tarball and verifies its checksum; the pacman repo above ships the same content pre-built and is the recommended path.
 
 **Optional deps.**
 
@@ -85,13 +93,13 @@ The install script only automates these steps. Append to `/etc/pacman.conf` (on 
 ```ini
 [claude-desktop-extra]
 SigLevel = Required DatabaseRequired
-Server = https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
+Server = https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download
 ```
 
 Then import the signing key, **verify its fingerprint**, and locally sign it:
 
 ```bash
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc -o /tmp/claude-desktop-extra.asc
+curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/gpg-key.asc -o /tmp/claude-desktop-extra.asc
 gpg --show-keys --with-fingerprint /tmp/claude-desktop-extra.asc
 # Must print: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867 - stop here if it does not.
 
@@ -111,7 +119,7 @@ The `PKGBUILD` is generated and CI-tested on every release, and published as a r
 
 ```bash
 mkdir claude-desktop-extra && cd claude-desktop-extra
-base=https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download
+base=https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download
 curl -fsSL -O "$base/PKGBUILD" -O "$base/claude-desktop-extra.install"
 makepkg -si
 ```
@@ -123,7 +131,7 @@ makepkg -si
 
 ```bash
 # Add repository (one-time setup)
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install.sh | sudo bash
+curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install.sh | sudo bash
 
 # Install
 sudo apt install claude-desktop-extra
@@ -143,7 +151,7 @@ sudo apt install qemu-system-x86 ovmf virtiofsd        # arm64: qemu-system-arm 
 <summary>Manual .deb install (without APT repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-extra_1.24012.9-8_amd64.deb
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra_1.24012.9-8_amd64.deb
 sudo dpkg -i claude-desktop-extra_*_amd64.deb
 ```
 </details>
@@ -151,7 +159,7 @@ sudo dpkg -i claude-desktop-extra_*_amd64.deb
 ### Fedora / RHEL (DNF Repository)
 ```bash
 # Add repository (one-time setup)
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
+curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-rpm.sh | sudo bash
 
 # Install
 sudo dnf install claude-desktop-extra
@@ -171,7 +179,7 @@ sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd   # arm64: qemu-system-aarc
 <summary>Manual .rpm install (without DNF repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/claude-desktop-extra-1.24012.9-8.x86_64.rpm
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra-1.24012.9-8.x86_64.rpm
 sudo dnf install ./claude-desktop-extra-*.x86_64.rpm
 ```
 </details>
@@ -179,10 +187,10 @@ sudo dnf install ./claude-desktop-extra-*.x86_64.rpm
 ### NixOS / Nix
 ```bash
 # Try without installing
-nix run github:patrickjaja/claude-desktop-bin
+nix run github:patrickjaja/claude-desktop-extra
 
 # Or add to flake.nix
-nix profile install github:patrickjaja/claude-desktop-bin
+nix profile install github:patrickjaja/claude-desktop-extra
 ```
 
 <details>
@@ -190,7 +198,7 @@ nix profile install github:patrickjaja/claude-desktop-bin
 
 ```nix
 {
-  inputs.claude-desktop.url = "github:patrickjaja/claude-desktop-bin";
+  inputs.claude-desktop.url = "github:patrickjaja/claude-desktop-extra";
 
   # In your system config:
   environment.systemPackages = [
@@ -219,7 +227,7 @@ The `claude://` protocol handler (needed for OAuth sign-in) is **automatically r
 
 ```bash
 # Download from GitHub Releases
-wget https://github.com/patrickjaja/claude-desktop-bin/releases/latest/download/Claude_Desktop-1.24012.9-x86_64.AppImage
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/Claude_Desktop-1.24012.9-x86_64.AppImage
 chmod +x Claude_Desktop-*-x86_64.AppImage
 ./Claude_Desktop-*-x86_64.AppImage
 ```
@@ -230,8 +238,8 @@ chmod +x Claude_Desktop-*-x86_64.AppImage
 
 ### From Source
 ```bash
-git clone https://github.com/patrickjaja/claude-desktop-bin.git
-cd claude-desktop-bin
+git clone https://github.com/patrickjaja/claude-desktop-extra.git
+cd claude-desktop-extra
 ./scripts/build-local.sh --install
 ```
 
@@ -249,7 +257,15 @@ The project was renamed from `claude-desktop-bin` to `claude-desktop-extra`. For
 
 - **APT / DNF:** nothing to do - the old package is replaced by `claude-desktop-extra` on your next regular upgrade (a transitional package handles apt).
 - **Arch package:** nothing to do - `pacman -Syu` offers to replace `claude-desktop-bin` with `claude-desktop-extra`.
-- **Arch repo section (one-time edit):** the repository database is now named `claude-desktop-extra`. An existing `[claude-desktop-bin]` section in `/etc/pacman.conf` keeps working during the transition, but rename it to `[claude-desktop-extra]` (or `[claude-desktop-extra-aarch64]`) when convenient - the `SigLevel`, `Server` line and signing key stay the same.
+- **Arch repo section (one-time edit):** an existing `[claude-desktop-bin]` section in `/etc/pacman.conf` keeps working during the transition (a mirror serves the old location), but switch to the new stanza when convenient - new section name and new `Server` URL, same `SigLevel` and signing key:
+
+  ```ini
+  [claude-desktop-extra]
+  SigLevel = Required DatabaseRequired
+  Server = https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download
+  ```
+
+  (aarch64: use `[claude-desktop-extra-aarch64]` with the same `Server` line.)
 - **Themes / flag overrides:** your `claude-desktop-bin.jsonc` is migrated to `claude-desktop-extra.jsonc` automatically on first launch.
 
 ### Verifying the repository signing key
@@ -263,7 +279,7 @@ Fingerprint: 825A 7D15 D78B ABE4 5646  D5DF 3824 09F5 9790 8867
 ```
 
 ```bash
-curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc | gpg --show-keys --with-fingerprint
+curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/gpg-key.asc | gpg --show-keys --with-fingerprint
 # The printed fingerprint must match the value above.
 ```
 
@@ -478,7 +494,7 @@ Features the official build doesn't have - either they exist nowhere upstream (t
 | `fix_computer_use_tcc.nim` | Stubs the macOS TCC permission IPC (accessibility / screen recording) with `not_applicable` answers - TCC has no Linux equivalent, and without handlers the renderer's permission checks throw "No handler registered" |
 | `fix_quick_entry_position.nim` | [Quick Entry](#quick-entry) opens on the cursor's monitor instead of the primary display and auto-focuses the input; position/focus retries run only on X11 (Wayland doesn't reposition after `show()`) |
 | `fix_quick_entry_cli_toggle.nim` | `claude-desktop --toggle`: toggles Quick Entry in ~5-25 ms via a Unix socket (per-profile path) instead of a ~300 ms Electron spawn - fast enough for a global hotkey |
-| `fix_quick_entry_app_id.nim` | Gives Quick Entry its own Wayland `app_id` (`claude-quick-entry`) so shell-extension rules can target it separately from the main window ([#39](https://github.com/patrickjaja/claude-desktop-bin/issues/39)) |
+| `fix_quick_entry_app_id.nim` | Gives Quick Entry its own Wayland `app_id` (`claude-quick-entry`) so shell-extension rules can target it separately from the main window ([#39](https://github.com/patrickjaja/claude-desktop-extra/issues/39)) |
 | `fix_quick_entry_ready_wayland.nim` | On native Wayland `ready-to-show` never fires for frameless transparent windows, hanging the popup - adds a 100 ms timeout |
 | `fix_quick_entry_wayland_blur_guard.nim` | Wayland emits spurious blur events that dismissed Quick Entry immediately; blur-to-dismiss now only counts after the window was actually focused |
 | `fix_profile_url_routing.nim` | [Multi-profile](#multiple-profiles) SSO: writes a per-profile auth marker before opening SSO URLs so the launcher can route the `claude://` callback to the profile that started the flow |
@@ -494,10 +510,10 @@ Upstream ships the same JS bundle to all platforms; these patches open `darwin`/
 | `fix_app_quit.nim` | The app hung on exit: after the `will-quit` cleanup handler runs, a second `app.quit()` is a no-op on Linux - uses `app.exit(0)` instead |
 | `fix_browse_files_linux.nim` | The file dialog offers `openDirectory` only on macOS upstream; adds Linux (Electron supports it natively) |
 | `fix_browser_tools_linux.nim` | Enables Chrome browser tools: repoints the native-messaging host to Claude Code's wrapper, extends browser discovery beyond upstream's Chrome+Edge (Chromium, Brave, Vivaldi, Opera), and adds Linux branches for extension auto-install and the DevTools opener - both still macOS/Windows-only upstream |
-| `fix_builtin_mcp_browser_env.nim` | Built-in MCP servers run with a filtered env of `HOME,LOGNAME,PATH,SHELL,TERM,USER` - no display variables, fine on macOS, but on Linux the server can't open a browser for OAuth. Adds `DISPLAY`/Wayland/XDG/DBUS/`BROWSER`/`KDE_SESSION_VERSION` (without the last, `xdg-open` on KDE no-ops silently via its `kfmclient` fallback) ([#139](https://github.com/patrickjaja/claude-desktop-bin/issues/139)) |
-| `fix_builtin_mcp_open_url_handler.nim` | Parent side of the M365 OAuth browser-open delegation: adds an `open-url` branch (https-only, → `shell.openExternal`) to the built-in MCP host's child-message handler - the same mechanism remote OAuth connectors use ([#139](https://github.com/patrickjaja/claude-desktop-bin/issues/139)) |
-| `fix_office365_mcp_open_url.nim` | Child side: the bundled `office365-mcp` server posts `{type:"open-url"}` to the Electron parent instead of spawning `xdg-open`, which is unreliable inside the MCP child process on KDE (silent no-op → 300 s sign-in timeout) ([#139](https://github.com/patrickjaja/claude-desktop-bin/issues/139)) |
-| `fix_cowork_firmware_paths_linux.nim` | The Cowork VM capability probe hardcodes Debian firmware/virtiofsd paths, so on other distros Cowork reports "Download failed" / "requires QEMU" even with QEMU installed. Adds Fedora/RHEL/Arch OVMF and Arch/NixOS virtiofsd locations plus `CLAUDE_OVMF_CODE_PATH`/`CLAUDE_VIRTIOFSD_PATH` overrides for non-FHS setups ([#177](https://github.com/patrickjaja/claude-desktop-bin/issues/177)) |
+| `fix_builtin_mcp_browser_env.nim` | Built-in MCP servers run with a filtered env of `HOME,LOGNAME,PATH,SHELL,TERM,USER` - no display variables, fine on macOS, but on Linux the server can't open a browser for OAuth. Adds `DISPLAY`/Wayland/XDG/DBUS/`BROWSER`/`KDE_SESSION_VERSION` (without the last, `xdg-open` on KDE no-ops silently via its `kfmclient` fallback) ([#139](https://github.com/patrickjaja/claude-desktop-extra/issues/139)) |
+| `fix_builtin_mcp_open_url_handler.nim` | Parent side of the M365 OAuth browser-open delegation: adds an `open-url` branch (https-only, → `shell.openExternal`) to the built-in MCP host's child-message handler - the same mechanism remote OAuth connectors use ([#139](https://github.com/patrickjaja/claude-desktop-extra/issues/139)) |
+| `fix_office365_mcp_open_url.nim` | Child side: the bundled `office365-mcp` server posts `{type:"open-url"}` to the Electron parent instead of spawning `xdg-open`, which is unreliable inside the MCP child process on KDE (silent no-op → 300 s sign-in timeout) ([#139](https://github.com/patrickjaja/claude-desktop-extra/issues/139)) |
+| `fix_cowork_firmware_paths_linux.nim` | The Cowork VM capability probe hardcodes Debian firmware/virtiofsd paths, so on other distros Cowork reports "Download failed" / "requires QEMU" even with QEMU installed. Adds Fedora/RHEL/Arch OVMF and Arch/NixOS virtiofsd locations plus `CLAUDE_OVMF_CODE_PATH`/`CLAUDE_VIRTIOFSD_PATH` overrides for non-FHS setups ([#177](https://github.com/patrickjaja/claude-desktop-extra/issues/177)) |
 | `fix_cowork_font.nim` | claude.ai initializes the chat-font preference only when the Chat view mounts; applies it to the Cowork tab too (it fell back to Serif) |
 | `fix_cross_device_rename.nim` | Adds an EXDEV copy+delete fallback to `fs.rename()`: downloads land in `/tmp` (usually a separate tmpfs) and are renamed into `~/.config`, which fails across filesystems |
 | `fix_detected_projects_linux.nim` | Project detection is gated to macOS and the VS Code/Cursor/Zed state-DB paths are hardcoded macOS locations; opens the gate and adds the Linux paths |
@@ -508,7 +524,7 @@ Upstream ships the same JS bundle to all platforms; these patches open `darwin`/
 | `fix_native_frame.nim` | Upstream builds the integrated titlebar only on Windows and gives Linux the native GTK frame; enables the integrated titlebar on Linux by default (opt out via `CLAUDE_NATIVE_TITLEBAR=1` / `--native-titlebar`) |
 | `fix_open_in_editor_linux.nim` | "Open in VS Code / Cursor / Zed / Windsurf" gates on `getApplicationInfoForProtocol`, which answers only on macOS/Windows - Linux editors always showed as not installed. Answers it via an `xdg-mime` shim |
 | `fix_process_argv_renderer.nim` | The preload exposes a `process` object without `argv`; the Claude Code SDK web bundle calls `process.argv.includes()`, and the TypeError blocked Dispatch responses from rendering. Injects an empty `argv` |
-| `fix_renderer_gone_suppressed_log.nim` | Logs main-webview renderer deaths upstream silently suppresses - a kernel OOM SIGKILL arrives as reason `killed` and left no trace in `main.log` ([#128](https://github.com/patrickjaja/claude-desktop-bin/issues/128)) |
+| `fix_renderer_gone_suppressed_log.nim` | Logs main-webview renderer deaths upstream silently suppresses - a kernel OOM SIGKILL arrives as reason `killed` and left no trace in `main.log` ([#128](https://github.com/patrickjaja/claude-desktop-extra/issues/128)) |
 | `fix_sensitive_dirs_linux.nim` | The sandbox sensitive-directories block list has macOS and Windows entries but none for Linux; adds `.local/share/keyrings`, `.pki`, `.config/autostart` |
 | `fix_startup_settings.nim` | Session-restore handling for "Start at login": hides the main window when the launch comes from session restore, and keeps autostart entries per-profile. The base XDG autostart toggle is native upstream (asserted by embedded guards) |
 | `fix_tray_dbus.nim` | Serializes tray destroy/recreate (mutex + cleanup delay) - the DBus/StatusNotifier race left ghost tray icons - and drops the recreate-on-theme-change (the Linux tray icon is static) |
@@ -543,11 +559,11 @@ Flags this project adds on top of the official build (run `claude-desktop --help
 
 | Variable | Values | Description |
 |----------|--------|-------------|
-| `CLAUDE_DISABLE_GPU` | `1`, `full` | Fix white screen on some GPU/driver combos ([#13](https://github.com/patrickjaja/claude-desktop-bin/issues/13)). `1` disables compositing only, `full` disables GPU entirely |
+| `CLAUDE_DISABLE_GPU` | `1`, `full` | Fix white screen on some GPU/driver combos ([#13](https://github.com/patrickjaja/claude-desktop-extra/issues/13)). `1` disables compositing only, `full` disables GPU entirely |
 | `CLAUDE_PROFILE` | name | Select a [profile](#multiple-profiles) by name (also `claude-desktop-NAME` / `--profile=NAME`) |
 | `CLAUDE_NATIVE_TITLEBAR` | `1` | Restore the native window frame instead of the integrated titlebar (same as `--native-titlebar`) |
-| `CLAUDE_USE_XWAYLAND` | `1` | Force XWayland instead of native Wayland. Also fixes "app exits after seconds" GPU crashes ([#180](https://github.com/patrickjaja/claude-desktop-bin/issues/180), see [wayland.md](wayland.md)) |
-| `CLAUDE_PASSWORD_STORE` | backend, `auto` | Force the Chromium keyring backend (`gnome-libsecret`, `kwallet6`, `basic`, ...). Default: on desktops Chromium gives no keyring backend (Hyprland, sway, XFCE, ...), a running Secret Service is used automatically so sign-in persists ([#191](https://github.com/patrickjaja/claude-desktop-bin/issues/191)). `auto` disables that detection |
+| `CLAUDE_USE_XWAYLAND` | `1` | Force XWayland instead of native Wayland. Also fixes "app exits after seconds" GPU crashes ([#180](https://github.com/patrickjaja/claude-desktop-extra/issues/180), see [wayland.md](wayland.md)) |
+| `CLAUDE_PASSWORD_STORE` | backend, `auto` | Force the Chromium keyring backend (`gnome-libsecret`, `kwallet6`, `basic`, ...). Default: on desktops Chromium gives no keyring backend (Hyprland, sway, XFCE, ...), a running Secret Service is used automatically so sign-in persists ([#191](https://github.com/patrickjaja/claude-desktop-extra/issues/191)). `auto` disables that detection |
 
 Set permanently in `~/.bashrc` / `~/.zshrc`, or pass per-launch: `CLAUDE_DISABLE_GPU=1 claude-desktop`
 
@@ -605,7 +621,7 @@ Computer Use patches emit `[claude-cu] diagnostics:` lines showing the detected 
   - KDE screen-share / Computer Use consent granted before the rename is keyed to the old id - re-grant once; it persists from then on.
   - GNOME shell-extension blacklists (Rounded Window Corners, Unite, Blur My Shell) referencing `com.anthropic.claude-quick-entry` should become `claude-quick-entry`.
   - **NixOS** doesn't use `systemd-run --scope`; portal identity may not resolve on GNOME Wayland - use `--install-gnome-hotkey`.
-  - **Sandboxes/containers** without a reachable user-systemd (bwrap, distrobox, restricted Flatpaks) auto-skip the scope wrap; force it with `--no-systemd-scope` / `CLAUDE_DISABLE_SYSTEMD_SCOPE=1` if the socket exists but is unreachable ([#89](https://github.com/patrickjaja/claude-desktop-bin/issues/89)).
+  - **Sandboxes/containers** without a reachable user-systemd (bwrap, distrobox, restricted Flatpaks) auto-skip the scope wrap; force it with `--no-systemd-scope` / `CLAUDE_DISABLE_SYSTEMD_SCOPE=1` if the socket exists but is unreachable ([#89](https://github.com/patrickjaja/claude-desktop-extra/issues/89)).
 - **Computer Use targets the primary monitor** - screenshots/clicks can be retargeted with `switch_display`; the teach overlay stays on the primary display. See [Computer Use](#computer-use).
 - **CoworkSpaces are local-only** on every platform (no account-sync) - a set created on macOS/Windows won't transfer to Linux. Upstream behavior.
 

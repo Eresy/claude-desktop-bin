@@ -76,9 +76,13 @@ _legacy_repo_note() {
     if grep -Eq '^\s*\[claude-desktop-bin(-aarch64)?\]' /etc/pacman.conf 2>/dev/null; then
         local _suffix=""
         [ "$(uname -m)" = "aarch64" ] && _suffix="-aarch64"
-        echo "==> This package is now claude-desktop-extra. Update /etc/pacman.conf:"
-        echo "==>   rename the [claude-desktop-bin${_suffix}] section to [claude-desktop-extra${_suffix}]"
-        echo "==>   (the Server line stays unchanged), then run: sudo pacman -Sy"
+        echo "==> This package is now claude-desktop-extra. Your [claude-desktop-bin${_suffix}]"
+        echo "==> section keeps working via a mirror during the transition, but please"
+        echo "==> replace it in /etc/pacman.conf with:"
+        echo "==>   [claude-desktop-extra${_suffix}]"
+        echo "==>   SigLevel = Required DatabaseRequired"
+        echo "==>   Server = https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download"
+        echo "==> then run: sudo pacman -Sy"
     fi
 }
 

@@ -15,24 +15,24 @@
 </head>
 <body>
   <h1>Claude Desktop for Linux</h1>
-  <p>Unofficial RPM repository for <a href="https://github.com/patrickjaja/claude-desktop-bin">claude-desktop-extra</a>.</p>
+  <p>Unofficial RPM repository for <a href="https://github.com/patrickjaja/claude-desktop-extra">claude-desktop-extra</a>.</p>
 
   <h2>Quick Setup (Fedora / RHEL / openSUSE)</h2>
-  <pre>curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
+  <pre>curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-rpm.sh | sudo bash
 sudo dnf install claude-desktop-extra</pre>
 
   <h2>Manual Setup</h2>
   <pre># Import GPG key
-sudo rpm --import https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc
+sudo rpm --import https://patrickjaja.github.io/claude-desktop-extra/gpg-key.asc
 
 # Add repository
 sudo tee /etc/yum.repos.d/claude-desktop.repo &lt;&lt;'EOF'
 [claude-desktop]
 name=Claude Desktop for Linux
-baseurl=https://patrickjaja.github.io/claude-desktop-bin/rpm/
+baseurl=https://patrickjaja.github.io/claude-desktop-extra/rpm/
 enabled=1
 gpgcheck=1
-gpgkey=https://patrickjaja.github.io/claude-desktop-bin/gpg-key.asc
+gpgkey=https://patrickjaja.github.io/claude-desktop-extra/gpg-key.asc
 repo_gpgcheck=1
 EOF
 
@@ -45,15 +45,15 @@ sudo dnf install claude-desktop-extra</pre>
 
   <h2>Other Distros</h2>
   <ul>
-    <li><strong>Debian / Ubuntu:</strong> <a href="https://patrickjaja.github.io/claude-desktop-bin/">APT repository</a></li>
-    <li><strong>Arch Linux / Manjaro:</strong> <a href="https://github.com/patrickjaja/claude-desktop-bin#arch-linux--manjaro-pacman-repository">Pacman repository</a></li>
-    <li><strong>AppImage:</strong> Download from <a href="https://github.com/patrickjaja/claude-desktop-bin/releases/latest">GitHub Releases</a></li>
+    <li><strong>Debian / Ubuntu:</strong> <a href="https://patrickjaja.github.io/claude-desktop-extra/">APT repository</a></li>
+    <li><strong>Arch Linux / Manjaro:</strong> <a href="https://github.com/patrickjaja/claude-desktop-extra#arch-linux--manjaro-pacman-repository">Pacman repository</a></li>
+    <li><strong>AppImage:</strong> Download from <a href="https://github.com/patrickjaja/claude-desktop-extra/releases/latest">GitHub Releases</a></li>
   </ul>
 
   <div class="note">
     This is an unofficial community package, not supported by Anthropic.
   </div>
 
-  <p><a href="https://github.com/patrickjaja/claude-desktop-bin">Source &amp; Issues on GitHub</a></p>
+  <p><a href="https://github.com/patrickjaja/claude-desktop-extra">Source &amp; Issues on GitHub</a></p>
 </body>
 </html>

@@ -240,6 +240,16 @@ PROF
     ;;
 esac
 
+# Rename migration (retire with the transition window): point an APT source
+# still on the pre-rename Pages URL at the new repository. Guarded - must
+# never fail the dpkg transaction (script runs under set -e).
+SOURCES=/etc/apt/sources.list.d/claude-desktop.sources
+if [ -f "$SOURCES" ] && grep -q 'patrickjaja.github.io/claude-desktop-bin/' "$SOURCES" 2>/dev/null; then
+    if sed -i 's|patrickjaja.github.io/claude-desktop-bin/|patrickjaja.github.io/claude-desktop-extra/|g' "$SOURCES" 2>/dev/null; then
+        echo "claude-desktop-extra: migrated APT source to the new repository URL"
+    fi
+fi
+
 if command -v update-icon-caches >/dev/null 2>&1; then
     update-icon-caches /usr/share/icons/hicolor || true
 fi
@@ -321,6 +331,24 @@ Description: transitional package - renamed to claude-desktop-extra
  This transitional package ensures a smooth upgrade and can be safely
  removed after installation.
 EOF
+
+    # postinst: migrate the APT source to the post-rename Pages URL. The old
+    # patrickjaja.github.io/claude-desktop-bin/ path is served by the legacy
+    # mirror only during the transition window; rewriting it here makes every
+    # upgraded install permanent. Guarded and idempotent - a migration hiccup
+    # must never fail the dpkg transaction.
+    cat > "$trans_root/DEBIAN/postinst" << 'EOF'
+#!/bin/sh
+set -u
+SOURCES=/etc/apt/sources.list.d/claude-desktop.sources
+if [ -f "$SOURCES" ] && grep -q 'patrickjaja.github.io/claude-desktop-bin/' "$SOURCES" 2>/dev/null; then
+    if sed -i 's|patrickjaja.github.io/claude-desktop-bin/|patrickjaja.github.io/claude-desktop-extra/|g' "$SOURCES" 2>/dev/null; then
+        echo "claude-desktop-bin: migrated APT source to the new claude-desktop-extra repository URL"
+    fi
+fi
+exit 0
+EOF
+    chmod 0755 "$trans_root/DEBIAN/postinst"
 
     TRANSITIONAL_DEB_PATH="$OUTPUT_DIR/claude-desktop-bin_${DEB_VERSION}_all.deb"
     if command -v fakeroot >/dev/null 2>&1; then

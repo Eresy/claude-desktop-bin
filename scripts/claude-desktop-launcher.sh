@@ -1558,7 +1558,7 @@ fi
 # ---------------------------------------------------------------------------
 # Some GPU/driver combinations (notably GBM buffer creation failures on
 # Wayland, common on Fedora KDE) cause a blank white window.
-# See: https://github.com/patrickjaja/claude-desktop-bin/issues/13
+# See: https://github.com/patrickjaja/claude-desktop-extra/issues/13
 
 # Milder GPU workaround than disabling it outright: route rendering through
 # ANGLE's GL backend instead of the native Wayland/GBM path. Some GPU +

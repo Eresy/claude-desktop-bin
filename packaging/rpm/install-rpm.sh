@@ -1,11 +1,11 @@
 #!/bin/bash
 # install-rpm.sh — Set up the Claude Desktop RPM repository
 #
-# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-bin/install-rpm.sh | sudo bash
+# Usage: curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-rpm.sh | sudo bash
 
 set -euo pipefail
 
-REPO_URL="https://patrickjaja.github.io/claude-desktop-bin"
+REPO_URL="https://patrickjaja.github.io/claude-desktop-extra"
 REPO_FILE="/etc/yum.repos.d/claude-desktop.repo"
 
 # Check root
