@@ -8,13 +8,13 @@ disable-model-invocation: true
 
 **When to run this:** normally you don't. CI auto-releases new upstream versions (version-check.yml dispatches build-and-release.yml; green run = released + `.upstream-version` bumped + tracking issue closed). Run this skill when the **auto-release failed** (a comment on the "new version detected" issue links the failed run) or when you want a deep audit of a bump. On a patch failure, decide FIRST: did the re-minify just move the anchor (fix the regex), or did upstream natively implement what we patch (**remove the patch** — the expected direction, since Anthropic maintains 1p Linux support; do NOT convert to a regression guard)?
 
-Run from `/home/patrickjaja/development/claude-desktop-bin`. The official Linux `.deb` is remotely managed and re-minifies every release; patches use `[\w$]+` wildcards on stable string anchors. Step 1 runs `/fresh-upstream` for a clean extract; Step 9 ends with `/deploy` to release. `$ARGUMENTS` may name a target version.
+Run from the repo root. The official Linux `.deb` is remotely managed and re-minifies every release; patches use `[\w$]+` wildcards on stable string anchors. Step 1 runs `/fresh-upstream` for a clean extract; Step 9 ends with `/deploy` to release. `$ARGUMENTS` may name a target version.
 
 Use sequential thinking and delegate independent analysis (diff, flag audit, ion-dist, platform gates) to parallel sub-agents where useful; you coordinate and edit.
 
 ## Step 0 - clean slate
 ```bash
-cd /home/patrickjaja/development/claude-desktop-bin
+cd "$(git rev-parse --show-toplevel)"
 git status                  # must be clean before starting
 rm -rf build/ extract/      # old artifacts
 ```

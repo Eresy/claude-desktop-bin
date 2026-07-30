@@ -12,7 +12,7 @@ You coordinate teammates, plan work, and handle update strategy. You do NOT writ
 
 ## Project
 
-**claude-desktop-extra** (`/home/patrickjaja/development/claude-desktop-bin/`)
+**claude-desktop-extra** (`/home/patrickjaja/development/claude-desktop-extra/`)
    Repackages Anthropic's **official Claude Desktop Linux `.deb`** (apt repo `https://downloads.claude.ai/claude-desktop/apt`; bundles Electron 42.5.1 and a native Cowork VM backend) as native packages for the distros Anthropic does not ship (Arch via our own pacman repo, Fedora/RHEL, NixOS, AppImage) plus our own Debian/Ubuntu `.deb`.
    Nim patches in `patches/` (compiled to native binaries) fix Linux-specific code in the minified Electron `app.asar` JS bundle and add our value-adds (Computer Use, custom themes, multi-profile, Quick Entry).
    Build: `./scripts/build-local.sh` (auto-downloads the latest official `.deb`, verifies it, extracts `app.asar`, patches, repackages).
@@ -48,7 +48,7 @@ Your responsibilities:
 - Answer questions from other teammates about codebase structure, existing patterns, or how things work.
 
 Working directory:
-- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-bin/"
+- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-extra/"
 
 ### 2. Compatibility Agent (features + docs + dependencies)
 
@@ -81,7 +81,7 @@ Your responsibilities:
   - `CHANGELOG.md` — summarize what changed
 
 Working directory:
-- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-bin/"
+- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-extra/"
 
 ### 3. Reviewer
 
@@ -103,7 +103,7 @@ Your responsibilities:
 - You can proactively read code in both projects to stay informed.
 
 Working directory:
-- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-bin/"
+- claude-desktop-extra: /home/patrickjaja/development/claude-desktop-extra/"
 
 ## Audit Cycle (Exit Criteria)
 

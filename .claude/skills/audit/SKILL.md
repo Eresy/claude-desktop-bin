@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Audit - orchestrated project review
 
-You are the **coordinator**. Spawn a team of sub-agents to review in parallel, then synthesize ONE report. Run from `/home/patrickjaja/development/claude-desktop-bin`. `$ARGUMENTS` may scope the audit (e.g. "cowork only", "patches only"); default = full.
+You are the **coordinator**. Spawn a team of sub-agents to review in parallel, then synthesize ONE report. Run from the repo root. `$ARGUMENTS` may scope the audit (e.g. "cowork only", "patches only"); default = full.
 
 Use the `AskUserQuestion` tool (not limited to 4) whenever a finding needs the user's call. Read `/architecture` and `/linux` context first if unsure of the domain.
 

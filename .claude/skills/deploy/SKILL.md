@@ -12,8 +12,8 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
 
 ## Context
 - Repo: `patrickjaja/claude-desktop-extra` · Workflow: `build-and-release.yml` · default branch: `master`.
-- Current branch: !`git -C /home/patrickjaja/development/claude-desktop-bin branch --show-current`
-- Tracked upstream version: !`cat /home/patrickjaja/development/claude-desktop-bin/.upstream-version 2>/dev/null`
+- Current branch: !`git branch --show-current`
+- Tracked upstream version: !`cat .upstream-version 2>/dev/null`
 - Last release: !`gh -R patrickjaja/claude-desktop-extra release list --limit 1 2>/dev/null || echo "(gh not ready)"`
 - Recent runs: !`gh -R patrickjaja/claude-desktop-extra run list --workflow=build-and-release.yml --limit 3 2>/dev/null || echo "(gh not ready)"`
 

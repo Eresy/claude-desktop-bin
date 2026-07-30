@@ -61,29 +61,15 @@ curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-pacman.sh 
 sudo pacman -Syu claude-desktop-extra
 ```
 
-`-Syu` is deliberate: Arch only supports fully-upgraded systems, so installing from a freshly synced repo and upgrading happen in one step. Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
+Updates arrive via `sudo pacman -Syu` (AUR helpers wrap pacman, so `yay -Syu` picks them up too). Packages and the repository database are GPG-signed with the same key as our APT and RPM repos.
 
-**Alternative: AUR.** The same PKGBUILD is published as [`claude-desktop-extra`](https://aur.archlinux.org/packages/claude-desktop-extra) on the AUR, updated by CI on every release:
+**Alternative: AUR.** The same PKGBUILD is published as [`claude-desktop-extra`](https://aur.archlinux.org/packages/claude-desktop-extra), updated by CI on every release. It builds from the checksummed release tarball; the pacman repo above ships the same content pre-built and is the recommended path.
 
 ```bash
 yay -S claude-desktop-extra
 ```
 
-The AUR build downloads the pre-patched release tarball and verifies its checksum; the pacman repo above ships the same content pre-built and is the recommended path.
-
-**Optional deps.**
-
-**Cowork** (agent workspace VM). Not auto-installed (pacman skips `optdepends`); run the line for your arch:
-
-```bash
-sudo pacman -S --needed qemu-system-x86 edk2-ovmf virtiofsd     # x86_64
-sudo pacman -S --needed qemu-system-aarch64 edk2-aarch64 virtiofsd  # aarch64
-# then join the kvm group (once, needs re-login): sudo usermod -aG kvm "$USER"
-```
-
-> **Arch Linux ARM / EndeavourOS ARM / Manjaro ARM (native aarch64 host, e.g. Raspberry Pi 5):** `edk2-aarch64` is `arch=any` on archlinux.org but Arch Linux ARM's repos don't carry it, so `pacman -S edk2-aarch64` fails with `target not found` even after `-Syu` ([ALARM forum #16140](https://archlinuxarm.org/forum/viewtopic.php?t=16140)). Since the package is architecture-independent, grab it from the x86_64 Arch mirrors and install locally: `curl -L https://archlinux.org/packages/extra/any/edk2-aarch64/download -o edk2-aarch64.pkg.tar.zst && sudo pacman -U ./edk2-aarch64.pkg.tar.zst`.
-
-Also optional: `nodejs` (system MCP servers), `sqlite` (project detection), `claude-code`.
+**Optional deps.** **Cowork** (agent workspace VM) is **not auto-installed** (pacman skips `optdepends`) - install QEMU/KVM once, see [Cowork setup](#cowork-setup-needs-devkvm). Also optional: `nodejs` (system MCP servers), `sqlite` (project detection), `claude-code`.
 
 <details>
 <summary>Advanced: manual <code>pacman.conf</code> setup (without the install script)</summary>
@@ -109,7 +95,7 @@ sudo pacman-key --lsign-key 825A7D15D78BABE45646D5DF382409F597908867
 sudo pacman -Syu claude-desktop-extra
 ```
 
-Checking the fingerprint is what makes this trustworthy: it is published in [the README in git](#verifying-the-repository-signing-key), a different channel from the web server serving the key, so a swapped key does not match. Both key steps are required - under `SigLevel = Required` pacman rejects the repo until the key carries your local signature - and `--lsign-key` fails with a cryptic "There is no secret key available to sign with" if the keyring was never initialised, hence the `--init`.
+The fingerprint check is what makes this trustworthy (see [Verifying the repository signing key](#verifying-the-repository-signing-key)). Both key steps are required: under `SigLevel = Required` pacman rejects the repo until the key carries your local signature, and `--lsign-key` fails with a cryptic "There is no secret key available to sign with" if the keyring was never initialised, hence the `--init`.
 </details>
 
 <details>
@@ -138,14 +124,7 @@ sudo apt install claude-desktop-extra
 ```
 Updates are automatic via `sudo apt update && sudo apt upgrade`.
 
-**Optional deps.**
-
-**Cowork** (agent workspace VM). Auto-installed by `apt` (`Recommends`, mirroring Anthropic's official `.deb`); run manually only if you skipped recommends:
-
-```bash
-sudo apt install qemu-system-x86 ovmf virtiofsd        # arm64: qemu-system-arm qemu-efi-aarch64 virtiofsd
-# then join the kvm group (once, needs re-login): sudo usermod -aG kvm "$USER"
-```
+**Optional deps.** **Cowork** (agent workspace VM) packages are auto-installed by `apt` (`Recommends`, mirroring Anthropic's official `.deb`); only the one-time `kvm` group step remains - see [Cowork setup](#cowork-setup-needs-devkvm).
 
 <details>
 <summary>Manual .deb install (without APT repo)</summary>
@@ -166,14 +145,7 @@ sudo dnf install claude-desktop-extra
 ```
 Updates are automatic via `sudo dnf upgrade`.
 
-**Optional deps.**
-
-**Cowork** (agent workspace VM). Auto-installed by `dnf` (weak deps); run manually only if you disabled them:
-
-```bash
-sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd   # arm64: qemu-system-aarch64 edk2-aarch64 · RHEL: qemu-kvm instead of qemu-system-x86
-# then join the kvm group (once, needs re-login): sudo usermod -aG kvm "$USER"
-```
+**Optional deps.** **Cowork** (agent workspace VM) packages are auto-installed by `dnf` (weak deps); only the one-time `kvm` group step remains - see [Cowork setup](#cowork-setup-needs-devkvm).
 
 <details>
 <summary>Manual .rpm install (without DNF repo)</summary>
@@ -234,7 +206,7 @@ chmod +x Claude_Desktop-*-x86_64.AppImage
 
 > **Update:** AppImage supports delta updates via [appimagetool](https://github.com/AppImageCommunity/AppImageUpdate) - only changed blocks are downloaded (`appimageupdatetool Claude_Desktop-*.AppImage`, or `--appimage-update` from within). Compatible with [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) and [Gear Lever](https://github.com/mijorus/gearlever). Use `--integrate` / `--unintegrate` / `--diagnose` to manage the protocol handler.
 >
-> **Optional deps.** For **Cowork** (VM), install from your host's repos: Arch/Fedora `qemu-system-x86 edk2-ovmf virtiofsd` · Debian/Ubuntu `qemu-system-x86 ovmf virtiofsd` (arm64 firmware differs - see [Cowork setup](#cowork-setup-needs-devkvm)).
+> **Optional deps.** For **Cowork** (VM), install QEMU + UEFI firmware + virtiofsd from your host's repos - per-distro commands in [Cowork setup](#cowork-setup-needs-devkvm).
 
 ### From Source
 ```bash
@@ -245,7 +217,7 @@ cd claude-desktop-extra
 
 > **Note:** Source builds do not receive automatic updates. Pull and rebuild to update.
 >
-> **Optional deps.** A source build installs the native package for your distro, so the optional deps are the same as that distro's section above (e.g. on Arch, install the Cowork packages by hand since pacman doesn't pull `optdepends`).
+> **Optional deps.** A source build installs the native package for your distro, so the optional deps match that distro's section above; Cowork commands are in [Cowork setup](#cowork-setup-needs-devkvm) (on Arch install them by hand - pacman doesn't pull `optdepends`).
 
 ### ARM64 / aarch64 (Raspberry Pi 5, NVIDIA DGX Spark, Jetson, etc.)
 
@@ -253,20 +225,9 @@ ARM64 `.deb`, `.rpm`, AppImage, and Nix packages are available for **Raspberry P
 
 ### Migrating from claude-desktop-bin
 
-The project was renamed from `claude-desktop-bin` to `claude-desktop-extra`. For almost everyone the switch is automatic:
+The project was renamed from `claude-desktop-bin` to `claude-desktop-extra`, and the switch is automatic: the package replaces itself on your next regular upgrade (apt, dnf, and pacman all handle it), and your themes / flag overrides (`claude-desktop-bin.jsonc`) are migrated on first launch.
 
-- **APT / DNF:** nothing to do - the old package is replaced by `claude-desktop-extra` on your next regular upgrade (a transitional package handles apt).
-- **Arch package:** nothing to do - `pacman -Syu` offers to replace `claude-desktop-bin` with `claude-desktop-extra`.
-- **Arch repo section (one-time edit):** an existing `[claude-desktop-bin]` section in `/etc/pacman.conf` keeps working during the transition (a mirror serves the old location), but switch to the new stanza when convenient - new section name and new `Server` URL, same `SigLevel` and signing key:
-
-  ```ini
-  [claude-desktop-extra]
-  SigLevel = Required DatabaseRequired
-  Server = https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download
-  ```
-
-  (aarch64: use `[claude-desktop-extra-aarch64]` with the same `Server` line.)
-- **Themes / flag overrides:** your `claude-desktop-bin.jsonc` is migrated to `claude-desktop-extra.jsonc` automatically on first launch.
+One exception: an existing `[claude-desktop-bin]` section in `/etc/pacman.conf` points at a temporary transition mirror - replace it with the `[claude-desktop-extra]` stanza from the [Arch section above](#arch-linux--manjaro-pacman-repository) (same `SigLevel`, same signing key; aarch64: `[claude-desktop-extra-aarch64]`).
 
 ### Verifying the repository signing key
 
@@ -423,30 +384,32 @@ This binds the key directly via `gsettings`, bypassing the portal. See [wayland.
 
 Cowork (and Dispatch) run on the **official native Cowork VM backend** bundled inside the package (cowork-linux-helper + virtiofsd + smol-bin + QEMU/OVMF) - the same backend Anthropic ships in the official Linux build. There's no separate daemon to install; sessions run in a lightweight VM with `$HOME` shared in, which requires **`/dev/kvm`** on the host.
 
-**QEMU + OVMF firmware + virtiofsd are recommended dependencies** of the `.deb` / `.rpm` / pacman packages (matching Anthropic's official `.deb`), so a normal `apt`/`dnf` install pulls them by default. One step remains (needed once):
+**1. Install QEMU + UEFI firmware + virtiofsd.** The `.deb` / `.rpm` packages pull them automatically (`Recommends` / weak deps, matching Anthropic's official `.deb`), and the Nix flake bakes them into the app's closure. On **Arch** (pacman skips `optdepends`) and for **AppImage or source builds**, install them from your distro's repos:
 
 ```bash
-sudo usermod -aG kvm "$USER"        # /dev/kvm access - then log out and back in
+# Arch:          sudo pacman -S --needed qemu-system-x86 edk2-ovmf virtiofsd   # aarch64: qemu-system-aarch64 edk2-aarch64
+# Fedora:        sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd          # RHEL: qemu-kvm instead of qemu-system-x86 · aarch64: qemu-system-aarch64 edk2-aarch64
+# Debian/Ubuntu: sudo apt install qemu-system-x86 ovmf virtiofsd               # arm64: qemu-system-arm qemu-efi-aarch64 · Ubuntu 22.04: no virtiofsd pkg needed (bundled copy is used)
+```
+
+**2. Join the `kvm` group** (once - then log out and back in):
+
+```bash
+sudo usermod -aG kvm "$USER"        # /dev/kvm access
 ```
 
 The Claude Code CLI that Cowork/Dispatch drive is managed by the app itself - nothing to install. To pin your own binary, set `CLAUDE_CODE_LOCAL_BINARY=/path/to/claude`.
 
-> **AppImage, Nix, or source builds** don't pull system packages - install QEMU + UEFI firmware + virtiofsd yourself first (firmware package name differs on arm64):
-> ```bash
-> # Arch:          sudo pacman -S --needed qemu-base edk2-ovmf virtiofsd   # arm64: edk2-aarch64 instead of edk2-ovmf
-> # Fedora/RHEL:   sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd    # arm64: qemu-system-aarch64 edk2-aarch64
-> # Debian/Ubuntu: sudo apt install qemu-system-x86 ovmf virtiofsd         # Ubuntu 22.04: no virtiofsd pkg needed (bundled copy is used)
-> #                                                                        # arm64: qemu-system-arm qemu-efi-aarch64
-> ```
 > A **system virtiofsd is required on everything except Ubuntu 22.x** - the app's capability probe only falls back to the bundled `virtiofsd` on jammy (`/etc/os-release` gate). Without it Cowork reports "Cowork requires QEMU …" even when qemu and firmware are present (issue #177). If your distro installs virtiofsd outside the probed paths (`/usr/libexec`, `/usr/lib`, `/usr/lib/qemu`, `/usr/bin`), point the app at it with `CLAUDE_VIRTIOFSD_PATH=/path/to/virtiofsd`; a custom firmware location can likewise be set with `CLAUDE_OVMF_CODE_PATH=/path/to/OVMF_CODE.fd` (its `*_VARS.fd` sibling must sit next to it). The Nix flake wires all three automatically (see the Nix install section).
-> On Arch Linux ARM / EndeavourOS ARM / Manjaro ARM (native aarch64 hosts), `edk2-aarch64` is missing from the ALARM repos even though it's `arch=any` upstream - see the Arch install section above for the manual-download workaround.
+
+> **Arch Linux ARM / EndeavourOS ARM / Manjaro ARM (native aarch64 host, e.g. Raspberry Pi 5):** `edk2-aarch64` is `arch=any` on archlinux.org but Arch Linux ARM's repos don't carry it, so `pacman -S edk2-aarch64` fails with `target not found` even after `-Syu` ([ALARM forum #16140](https://archlinuxarm.org/forum/viewtopic.php?t=16140)). Since the package is architecture-independent, grab it from the x86_64 Arch mirrors and install locally: `curl -L https://archlinux.org/packages/extra/any/edk2-aarch64/download -o edk2-aarch64.pkg.tar.zst && sudo pacman -U ./edk2-aarch64.pkg.tar.zst`.
 
 ### Troubleshooting Cowork
 
 Run **`claude-desktop --diagnose`** first - it prints a full capability probe (KVM, vhost_vsock, QEMU, firmware, virtiofsd) and tells you exactly which piece is missing. Common popups and their fixes:
 
 - **"Download failed" / clicking Download does nothing** - almost always missing `kvm` group membership (`sudo usermod -aG kvm "$USER"`, then re-login), or on AppImage/Nix missing firmware or system virtiofsd.
-- **"Virtualization isn't fully set up" / "Cowork requires QEMU. Install it with …"** - QEMU, OVMF firmware, or virtiofsd is missing. The popup's `apt` command is upstream's and only correct on Debian/Ubuntu - use your distro's equivalent instead: `sudo pacman -S --needed qemu-system-x86 edk2-ovmf virtiofsd` (Arch), `sudo dnf install qemu-system-x86 edk2-ovmf virtiofsd` (Fedora; on RHEL use `qemu-kvm` instead of `qemu-system-x86`); aarch64 swaps in `qemu-system-aarch64` + `edk2-aarch64`. Details in your distro's [install section](#installation) (or the [AppImage/Nix note above](#cowork-setup-needs-devkvm)).
+- **"Virtualization isn't fully set up" / "Cowork requires QEMU. Install it with …"** - QEMU, OVMF firmware, or virtiofsd is missing. The popup's `apt` command is upstream's and only correct on Debian/Ubuntu - use your distro's command from [step 1 above](#cowork-setup-needs-devkvm) instead.
 - **"Cowork requires the vhost_vsock kernel module"** - on systemd distros this normally never appears: systemd pre-creates `/dev/vhost-vsock` at boot (static device node) and the kernel auto-loads the module the moment QEMU opens it. If you do see it, you are on a non-systemd init (Artix, Void), inside a container, or on a kernel built without the module - load it with `sudo modprobe vhost_vsock` and persist it (`echo vhost_vsock | sudo tee /etc/modules-load.d/vhost_vsock.conf`, or your init's equivalent).
 - **Dispatch stops responding or behaves oddly** - the Dispatch conversation keeps its state (including past errors) across restarts, so a broken session stays broken. Reset it: open the **⋮** menu next to the Dispatch title and click **Delete conversation**, then send your request again in the fresh conversation.
 

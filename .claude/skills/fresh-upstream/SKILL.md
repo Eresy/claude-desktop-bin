@@ -7,7 +7,7 @@ allowed-tools: Bash(rm -rf *), Bash(mkdir -p *), Bash(ar *), Bash(tar *), Bash(d
 
 # Fresh upstream extract (clean, unpatched)
 
-Goal: a pristine unpatched bundle in `./tmp/` so patch work compares against the true upstream. Run from `/home/patrickjaja/development/claude-desktop-bin`. `./tmp/` is gitignored.
+Goal: a pristine unpatched bundle in `./tmp/` so patch work compares against the true upstream. Run from the repo root. `./tmp/` is gitignored.
 
 **Critical:** `scripts/build-patched-tarball.sh` runs `apply_patches.py` - its output is PATCHED. For a clean baseline use the manual fetch + `asar` flow below.
 
@@ -15,7 +15,7 @@ Goal: a pristine unpatched bundle in `./tmp/` so patch work compares against the
 
 1. **cd to the repo** and read tracked version:
    ```bash
-   cd /home/patrickjaja/development/claude-desktop-bin
+   cd "$(git rev-parse --show-toplevel)"
    cat .upstream-version
    ```
 
