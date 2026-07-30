@@ -778,12 +778,12 @@
   }
 
   // --- motion: the pulsing Cowork glow ------------------------------------
-  // Sits at the top of the Themes panel rather than in its own nav entry, so it
-  // is reachable without scrolling past ~97 theme cards.
+  // Sits at the top of the Features panel rather than in its own nav entry - it
+  // is ours and applies live, so it goes ahead of the GrowthBook flag list.
   function renderGlowRow(panel) {
     // The bridge half of this switch lives in the mainView preload. If an older
     // preload is in place (a partially updated install), skip the row instead of
-    // throwing and taking the whole Themes panel down with it.
+    // throwing and taking the whole Features panel down with it.
     if (!api || typeof api.glowRead !== "function" || typeof api.glowSet !== "function") return;
 
     var head = el("div", "cdbx-sec-h");

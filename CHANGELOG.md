@@ -53,6 +53,8 @@ The same stylesheet also defines an `animate-[conway-pulse-glow_2s_ease-in-out_i
 
 As with anything keyed to remote claude.ai markup, a claude.ai deploy can rename the selector. It fails soft: the CSS matches nothing and the glow keeps pulsing exactly as it does today.
 
+Contributed by [@Felitendo](https://github.com/Felitendo) ([#210](https://github.com/patrickjaja/claude-desktop-extra/pull/210)) - thanks!
+
 ## 2026-07-29
 
 ### 84 community color palettes now ship with the package
