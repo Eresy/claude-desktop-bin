@@ -24,9 +24,9 @@ Also in this release: **`betaFeaturesEnabled` no longer exists upstream.** If yo
 
 Whether a palette ships as a built-in or came from the community collection is a packaging detail, not something to pick a theme by - so the two sections are now one **Common** list, alphabetically, in both the Settings panel and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker. Your themes and Gaming are unchanged.
 
-### The Extra panels link the files they write
+### The Extra panels link the config file behind them
 
-Each panel ends in the config files behind it, as links: click the path to open the file in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
+Each panel ends in the file it is really about, as a link: click the path to open it in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. Themes names the file a click there actually persists to, which depends on which of `claude-desktop-extra.jsonc` / `.json` exists; Features links the `.jsonc` - the file you edit by hand, and the one whose flag ids win over the panel. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
 
 ## 2026-07-30
 
