@@ -256,6 +256,15 @@ async function featuresPanel(featuresItem) {
   const fileRows = panel.querySelectorAll(".cdbx-pathrow");
   ok(fileRows.length === 2, "the Features panel links both override files (" + fileRows.length + ")");
   if (fileRows.length === 2) {
+    // The switches on this page write the .json; the .jsonc is the hand-edited
+    // file that wins over them. Saying it the other way round would send someone
+    // editing the file the panel overwrites.
+    ok(/saved to/.test(fileRows[0].textContent) &&
+       fileRows[0].querySelector(".cdbx-pathlink").textContent.endsWith("claude-desktop-extra.json"),
+       "the first row is the file the switches are saved to, the .json: " + fileRows[0].textContent);
+    ok(/win over this page/.test(fileRows[1].textContent) &&
+       fileRows[1].querySelector(".cdbx-pathlink").textContent.endsWith(".jsonc"),
+       "the second is the .jsonc, whose hand-edited flags win: " + fileRows[1].textContent);
     fileRows[0].querySelector(".cdbx-pathbtn").click();
     await sleep(40);
     ok(window.__revealCalls.indexOf("config-json:folder") >= 0,
@@ -468,15 +477,20 @@ async function themesPanel(themesItem) {
   ok(labels() === "Your themes:1 | Gaming:3 | Common:5 | More:1",
      "clearing the filter brings every section back");
 
-  // The config file we write is a link, not just text.
-  const savedRow = document.querySelector(".cdbx-panel .cdbx-pathrow");
+  // The config file we write is a link, not just text - and it must be the file
+  // a click here ACTUALLY writes, which depends on what exists on disk. This
+  // fixture reports the .json as the effective target, so a hardcoded .jsonc
+  // link would be wrong.
+  let savedRow = document.querySelector(".cdbx-panel .cdbx-pathrow");
   ok(!!savedRow, "the Themes panel shows the config file it saves to");
-  if (savedRow) {
-    savedRow.querySelector(".cdbx-pathlink").click();
-    await sleep(40);
-    ok(window.__revealCalls.indexOf("config-jsonc:open") >= 0,
-       "and clicking it opens that file: " + window.__revealCalls.join(","));
-  }
+  ok(savedRow.querySelector(".cdbx-pathlink").textContent.endsWith("claude-desktop-extra.json"),
+     "naming the effective save target, not the registry's fixed .jsonc: " +
+     savedRow.querySelector(".cdbx-pathlink").textContent);
+  savedRow.querySelector(".cdbx-pathlink").click();
+  await sleep(40);
+  ok(window.__revealCalls.indexOf("config-json:open") >= 0,
+     "and the link opens THAT file, derived from the path rather than hardcoded: " +
+     window.__revealCalls.join(","));
 
   // Applying still works from inside a section.
   const zeldaCard = Array.from(document.querySelectorAll(".cdbx-card")).find(function (c) {
@@ -487,6 +501,14 @@ async function themesPanel(themesItem) {
   const nowActive = Array.from(document.querySelectorAll(".cdbx-card.cdbx-on"))
     .map(function (c) { return c.querySelector(".cdbx-cardname").textContent; });
   ok(nowActive.join(",") === "Zelda", "applying from a section moves the highlight: " + nowActive.join(","));
+  savedRow = document.querySelector(".cdbx-panel .cdbx-pathrow");
+  ok(savedRow.querySelector(".cdbx-pathlink").textContent.endsWith(".jsonc"),
+     "an apply that reports a different file corrects the row: " +
+     savedRow.querySelector(".cdbx-pathlink").textContent);
+  savedRow.querySelector(".cdbx-pathlink").click();
+  await sleep(40);
+  ok(window.__revealCalls.indexOf("config-jsonc:open") >= 0,
+     "and the link follows it too: " + window.__revealCalls.join(","));
   ok(labels() === "Your themes:1 | Gaming:3 | Common:5 | More:1",
      "the sections survive a re-render after apply");
 }
@@ -955,8 +977,12 @@ window.__deployState = {
 };
 window.claudeAppBindings = {};
 window.cdbExtra = {
-  themesList: stub({ ok: true, entries: window.__themes, active: "mario", configPath: "/tmp/x.jsonc" }),
-  themesApply: stub({ ok: true, saved: "/tmp/x.jsonc" }),
+  themesList: stub({ ok: true, entries: window.__themes, active: "mario",
+    configPath: "/home/u/.config/Claude/claude-desktop-extra.jsonc",
+    savePath: "/home/u/.config/Claude/claude-desktop-extra.json" }),
+  themesApply: function () {
+    return Promise.resolve({ ok: true, saved: "/home/u/.config/Claude/claude-desktop-extra.jsonc" });
+  },
   flagsCatalog: stub({ ok: true, count: 0, entries: [] }),
   flagsRead: stub({ ok: true, storeSeen: true, server: {}, effective: {}, overridesJson: {}, overridesJsonc: {}, builtins: {},
     paths: { json: "/home/u/.config/Claude/claude-desktop-extra.json",

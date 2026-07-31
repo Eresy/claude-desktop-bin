@@ -120,6 +120,20 @@
     return out;
   }
 
+  // The file a theme apply will ACTUALLY be written to. __cdbThemes.configPath is
+  // a fixed .jsonc, but the engine's persist (__cdb_persist in
+  // add_feature_custom_themes.nim) walks [.jsonc, .json] and takes the first that
+  // EXISTS, because the .jsonc wins the startup merge - so on an install that has
+  // only the .json, the theme lands there and a hardcoded .jsonc label is a lie.
+  // Mirrored here rather than guessed, and the page derives its file link from
+  // whatever comes back.
+  function __cdbEx_themeSaveTarget() {
+    var p = __cdbEx_paths();
+    if (_fs.existsSync(p.jsonc)) return p.jsonc;
+    if (_fs.existsSync(p.json)) return p.json;
+    return p.jsonc;
+  }
+
   // --- flag catalog / state -------------------------------------------------
 
   function __cdbEx_gb() {
@@ -952,7 +966,12 @@
           dark: __cdbEx_dots(e.dark)
         };
       });
-      return { ok: true, entries: entries, active: themes.active(), configPath: themes.configPath || "" };
+      return {
+        ok: true, entries: entries, active: themes.active(),
+        configPath: themes.configPath || "",
+        // Where a click in the panel will really persist the choice.
+        savePath: __cdbEx_themeSaveTarget()
+      };
     },
 
     "cdb-extra:paths": function () {

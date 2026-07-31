@@ -499,5 +499,30 @@ section("[13] the file links open OUR files, and only those");
   }
 }
 
+// --- [14] which config file the Themes panel says it saves to ---------------
+// The theme engine's persist walks [.jsonc, .json] and takes the first that
+// EXISTS (the .jsonc wins the startup merge). __cdbThemes.configPath is a fixed
+// .jsonc, so the panel must not label its link with that - it would name the
+// wrong file on an install that only has the .json.
+section("[14] the Themes panel's save target follows what is on disk");
+{
+  const p = install();
+  const jsonc = join(p.userData, "claude-desktop-extra.jsonc");
+  const json = join(p.userData, "claude-desktop-extra.json");
+  globalThis.__cdbThemes = {
+    list: () => [], active: () => "mario", configPath: jsonc
+  };
+  const target = () => p.call("cdb-extra:themes-list").savePath;
+
+  ok(target() === jsonc, "with neither file present, the .jsonc is what would be created", target());
+  writeFileSync(json, "{}");
+  ok(target() === json, "with only the .json present, THAT is where a theme lands", target());
+  writeFileSync(jsonc, "{}");
+  ok(target() === jsonc, "with both, the .jsonc wins, as the engine's persist does", target());
+  ok(p.call("cdb-extra:themes-list").configPath === jsonc,
+     "the registry's own fixed path is still reported alongside it");
+  delete globalThis.__cdbThemes;
+}
+
 console.log("\n" + (fail ? `${pass} passed, ${fail} FAILED` : `ALL ${pass} CHECKS PASSED`));
 process.exit(fail ? 1 : 0);

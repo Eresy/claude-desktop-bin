@@ -825,6 +825,13 @@
   // file manager. The page passes a LOCATION NAME, never a path - the main side
   // owns the mapping, so nothing here can ask the desktop to open something else.
 
+  // Which of the two config files a path is, so the link opens the file the row
+  // NAMES. Hardcoding the location name next to a path that is computed elsewhere
+  // is how a link ends up pointing at the wrong file.
+  function cfgLocation(path) {
+    return /\.jsonc$/.test(path || "") ? "config-jsonc" : "config-json";
+  }
+
   function pathRow(label, path, name) {
     var row = el("div", "cdbx-pathrow");
     if (label) row.appendChild(el("span", "cdbx-pathlbl", label));
@@ -1005,9 +1012,18 @@
       var host = el("div", "cdbx-sections");
       panel.appendChild(host);
 
-      if (result.configPath) {
-        panel.appendChild(pathRow("Saved to", result.configPath, "config-jsonc"));
+      // The file a click here writes to. Which of the two it is depends on what
+      // exists on disk, so it comes from the main process and the link follows
+      // it - and an apply reports the file it really wrote, which wins.
+      var savePath = result.savePath || result.configPath;
+      var saveRow = null;
+      function drawSaveRow() {
+        var row = savePath ? pathRow("Your choice is saved to", savePath, cfgLocation(savePath)) : null;
+        if (saveRow && row) panel.replaceChild(row, saveRow);
+        else if (row) panel.appendChild(row);
+        saveRow = row;
       }
+      drawSaveRow();
 
       var active = result.active || null;
 
@@ -1042,6 +1058,12 @@
             }
             active = entry.name;
             draw(search.value);
+            // The engine reports the file it actually wrote; if that is not the
+            // one we predicted, the row follows it rather than staying wrong.
+            if (res.saved && res.saved !== savePath) {
+              savePath = res.saved;
+              drawSaveRow();
+            }
             toast("Applied " + entry.displayName + " - saved to " + (res.saved || "the config file"));
           }, function (err) {
             toast("Could not apply " + entry.displayName + ": " + (err && err.message ? err.message : String(err)), true);
@@ -1162,11 +1184,16 @@
       var list = el("div", "cdbx-list");
       panel.appendChild(list);
 
+      // Two files, and the labels have to say which does what: the switches on
+      // this page are written to the .json, while a flag id a user set by hand in
+      // the .jsonc wins over it per id.
       var paths = state.paths || {};
-      panel.appendChild(pathRow("Overrides are written to",
-        paths.json || "claude-desktop-extra.json", "config-json"));
+      if (paths.json) {
+        panel.appendChild(pathRow("Your switches are saved to", paths.json, cfgLocation(paths.json)));
+      }
       if (paths.jsonc) {
-        panel.appendChild(pathRow("Hand-edited entries win, in", paths.jsonc, "config-jsonc"));
+        panel.appendChild(pathRow("Flags you set by hand here win over this page",
+          paths.jsonc, cfgLocation(paths.jsonc)));
       }
       if (!state.storeSeen) {
         panel.appendChild(el("div", "cdbx-path",
