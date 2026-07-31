@@ -264,7 +264,7 @@ Three panels today:
 - **Extra → Features** - the catalogued upstream [feature flags](#feature-flag-overrides-advanced) as switches, no config-file editing needed.
 - **Extra → Deployment** - a **1P / 3P switch** plus the whole [third-party inference](#third-party--enterprise-inference) configuration as toggles and fields. Turning 3P on used to be a one-way door without a root shell; here it is a button, and every value is written to your own profile directory.
 
-Every panel ends in the files it writes, as links: click the path to open the file, or the **folder** button to show it in your file manager.
+Every panel ends in the config file behind it, as a link: click the path to open the file, or the **folder** button to show it in your file manager.
 
 Expect this section to grow - Extra is where the project is heading.
 

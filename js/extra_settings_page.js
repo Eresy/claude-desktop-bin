@@ -1184,13 +1184,12 @@
       var list = el("div", "cdbx-list");
       panel.appendChild(list);
 
-      // Two files, and the labels have to say which does what: the switches on
-      // this page are written to the .json, while a flag id a user set by hand in
-      // the .jsonc wins over it per id.
+      // Only the .jsonc is linked. It is the config file of this package - the one
+      // a human edits, with the commented flag catalog in it, and whose flag ids
+      // win over this page. The .json next to it is where the switches are
+      // persisted, but that is internal bookkeeping: it exists so this page never
+      // has to rewrite the commented file, and it is not a file to send anyone to.
       var paths = state.paths || {};
-      if (paths.json) {
-        panel.appendChild(pathRow("Your switches are saved to", paths.json, cfgLocation(paths.json)));
-      }
       if (paths.jsonc) {
         panel.appendChild(pathRow("Flags you set by hand here win over this page",
           paths.jsonc, cfgLocation(paths.jsonc)));

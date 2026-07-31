@@ -253,23 +253,25 @@ async function featuresPanel(featuresItem) {
   await sleep(60);
   ok(glow.getAttribute("aria-checked") === "true", "clicking the glow switch turns it on");
 
+  // Only the .jsonc is linked: it is the config file a human edits, and the one
+  // whose hand-set flag ids win over this page. The .json the switches are
+  // persisted to is internal bookkeeping and is deliberately not advertised.
   const fileRows = panel.querySelectorAll(".cdbx-pathrow");
-  ok(fileRows.length === 2, "the Features panel links both override files (" + fileRows.length + ")");
-  if (fileRows.length === 2) {
-    // The switches on this page write the .json; the .jsonc is the hand-edited
-    // file that wins over them. Saying it the other way round would send someone
-    // editing the file the panel overwrites.
-    ok(/saved to/.test(fileRows[0].textContent) &&
-       fileRows[0].querySelector(".cdbx-pathlink").textContent.endsWith("claude-desktop-extra.json"),
-       "the first row is the file the switches are saved to, the .json: " + fileRows[0].textContent);
-    ok(/win over this page/.test(fileRows[1].textContent) &&
-       fileRows[1].querySelector(".cdbx-pathlink").textContent.endsWith(".jsonc"),
-       "the second is the .jsonc, whose hand-edited flags win: " + fileRows[1].textContent);
+  ok(fileRows.length === 1, "the Features panel links exactly one file (" + fileRows.length + ")");
+  if (fileRows.length === 1) {
+    const shown = fileRows[0].querySelector(".cdbx-pathlink").textContent;
+    ok(shown.endsWith("claude-desktop-extra.jsonc"), "and it is the .jsonc: " + shown);
+    ok(/win over this page/.test(fileRows[0].textContent),
+       "worded as what that file does, not as where the switches are saved: " + fileRows[0].textContent);
     fileRows[0].querySelector(".cdbx-pathbtn").click();
     await sleep(40);
-    ok(window.__revealCalls.indexOf("config-json:folder") >= 0,
-       "the folder button of the .json works: " + window.__revealCalls.join(","));
+    ok(window.__revealCalls.indexOf("config-jsonc:folder") >= 0,
+       "its folder button works: " + window.__revealCalls.join(","));
   }
+  ok(!panel.textContent.includes("claude-desktop-extra.json\n") &&
+     !Array.from(panel.querySelectorAll(".cdbx-pathlink"))
+        .some(function (a) { return a.textContent.endsWith("claude-desktop-extra.json"); }),
+     "the internal .json is not linked anywhere in the panel");
 }
 
 // The Deployment panel: the 1P/3P switch writes the persisted deploymentMode and
