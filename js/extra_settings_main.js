@@ -264,6 +264,643 @@
     return "";
   }
 
+  // --- deployment mode: 1P / 3P -------------------------------------------
+  //
+  // Upstream decides the mode in the bootstrap (index.pre.js) before any window
+  // exists, from the FIRST config source that carries an inference or bootstrap
+  // block, and then relocates userData to "<userData>-3p":
+  //
+  //   1. /etc/claude-desktop/managed-settings.json - refused unless BOTH the file
+  //      and /etc/claude-desktop are root-owned and not group/world writable, and
+  //      ignored WHOLESALE if it carries one unrecognized key. A valid managed
+  //      file disables the local source entirely.
+  //   2. the APPLIED entry of the local config library: the id in
+  //      <3pDir>/configLibrary/_meta.json ("appliedId") names
+  //      <3pDir>/configLibrary/<id>.json, which upstream reads with the SAME flat
+  //      key schema as the managed file and only needs to be user-owned.
+  //
+  // 3P is then chosen unless the persisted "deploymentMode" key in
+  // <3pDir>/claude_desktop_config.json is "1p" - the escape hatch upstream's own
+  // 3P Setup writes and this page exposes. A managed config with
+  // authentication.disableClaudeAiSignIn (flat: disableDeploymentModeChooser)
+  // overrides even that, which is why this page never writes that key.
+  //
+  // So everything here is user-level and userData-relative: no root, no patch to
+  // the bootstrap, and the files are the ones upstream already reads. Both live
+  // in the "-3p" sibling of the ACTIVE profile's userData, which is where
+  // upstream keeps them regardless of the mode that ended up active.
+
+  var __cdbEx_ETC_DIR = "/etc/claude-desktop";
+  var __cdbEx_ETC_FILE = __cdbEx_ETC_DIR + "/managed-settings.json";
+  var __cdbEx_MODE_KEY = "deploymentMode";
+  // Anything the page never gets to see and never has to send back: a secret it
+  // echoes unchanged means "keep the stored value".
+  var __cdbEx_KEEP = "__cdb_unchanged__";
+  // 0600 files / 0700 dirs, matching upstream's own writes - these files hold
+  // inference credentials.
+  var __cdbEx_FMODE = 384;
+  var __cdbEx_DMODE = 448;
+
+  // Faithful port of upstream's 3p-dir resolver: CLAUDE_USER_DATA_DIR pins
+  // userData and disables the relocation entirely, otherwise the dir is the
+  // "-3p" sibling - already suffixed when we are running IN 3P mode.
+  function __cdbEx_3pDir() {
+    var ud = _app.getPath("userData");
+    if (process.env.CLAUDE_USER_DATA_DIR) return ud;
+    return /-3p$/.test(ud) ? ud : ud + "-3p";
+  }
+
+  function __cdbEx_deployPaths() {
+    var dir = __cdbEx_3pDir();
+    var lib = _path.join(dir, "configLibrary");
+    return {
+      userData: _app.getPath("userData"),
+      threePDir: dir,
+      modeFile: _path.join(dir, "claude_desktop_config.json"),
+      libDir: lib,
+      metaFile: _path.join(lib, "_meta.json"),
+      etcFile: __cdbEx_ETC_FILE
+    };
+  }
+
+  // The managed-config key catalog of Claude Desktop v1.24012.9, read out of the
+  // bundle's own schema (flat key, zod leaf type, scopes, title). Upstream drives
+  // its 3P Setup wizard from that schema; we cannot reach it from here (it is
+  // module-scoped in index.pre.js), so this is a PINNED COPY and is therefore
+  // version-sensitive: re-extract it on an upstream bump with
+  //   rg -ao 'flatKey:"[A-Za-z0-9_]+"' .vite/build/index.pre.js
+  // A key that no longer exists is silently dropped by the local config reader,
+  // but it INVALIDATES a whole /etc managed file - which is exactly why the page
+  // shows what it wrote and where. (betaFeaturesEnabled, still in older 3P docs,
+  // was removed upstream and is deliberately absent here.)
+  //
+  // kind:  bool | enum | text | secret | int | lines | models | json
+  // scope: "3p" (only applies in 3P mode) | "both"
+  // only:  render under this provider only
+  // lock:  never writable from this page, and why
+  var __cdbEx_DEPLOY_KEYS = [
+    // --- inference & connection ---------------------------------------------
+    { key: "inferenceProvider", kind: "enum", group: "connection", scope: "3p",
+      label: "Inference provider",
+      options: ["gateway", "vertex", "bedrock", "foundry", "anthropic"],
+      note: "The key that turns 3P on. Clearing it leaves a config with no inference block, which boots 1P." },
+    { key: "inferenceModels", kind: "models", group: "connection", scope: "3p",
+      label: "Model list",
+      note: "One model id per line, first is the default. Append [1m] for the 1M-token context window." },
+    { key: "modelDiscoveryEnabled", kind: "bool", group: "connection", scope: "3p",
+      label: "Model discovery", note: "Pull the model list from the provider instead of the list above." },
+    { key: "inferenceCredentialKind", kind: "enum", group: "connection", scope: "3p",
+      label: "Credential kind",
+      options: ["static", "helper-script", "interactive", "vendor-profile", "oauth", "workforce"] },
+    { key: "inferenceCustomHeaders", kind: "json", group: "connection", scope: "3p", secret: true,
+      label: "Custom inference headers", note: "JSON object added to every inference request." },
+
+    { key: "inferenceGatewayBaseUrl", kind: "text", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway base URL" },
+    { key: "inferenceGatewayApiKey", kind: "secret", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway API key" },
+    { key: "inferenceGatewayAuthScheme", kind: "enum", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway auth scheme", options: ["bearer", "x-api-key", "auto", "sso"] },
+    { key: "inferenceGatewayOidc", kind: "json", group: "connection", scope: "3p", only: "gateway", secret: true,
+      label: "Gateway SSO IdP (OIDC)" },
+
+    { key: "inferenceVertexProjectId", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "GCP project ID" },
+    { key: "inferenceVertexRegion", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "GCP region", note: "A region such as us-east5, or \"global\" for the global endpoint." },
+    { key: "inferenceVertexBaseUrl", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Vertex AI base URL" },
+    { key: "inferenceVertexCredentialsFile", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "GCP credentials file", note: "Leave empty to use gcloud application-default credentials." },
+    { key: "inferenceVertexOAuthClientId", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Vertex OAuth client ID" },
+    { key: "inferenceVertexOAuthClientSecret", kind: "secret", group: "connection", scope: "3p", only: "vertex",
+      label: "Vertex OAuth client secret" },
+    { key: "inferenceVertexOAuthLoginHint", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Vertex OAuth login hint" },
+    { key: "inferenceVertexOAuthScopes", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Vertex OAuth scopes" },
+    { key: "inferenceVertexWorkforceAudience", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Workforce Identity audience" },
+    { key: "inferenceVertexWorkforceOidc", kind: "json", group: "connection", scope: "3p", only: "vertex", secret: true,
+      label: "Workforce Identity IdP (OIDC)" },
+    { key: "inferenceVertexWorkforceUserProject", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "Workforce Identity billing project" },
+
+    { key: "inferenceBedrockRegion", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS region" },
+    { key: "inferenceBedrockBaseUrl", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "Bedrock base URL" },
+    { key: "inferenceBedrockBearerToken", kind: "secret", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS bearer token" },
+    { key: "inferenceBedrockProfile", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS profile name" },
+    { key: "inferenceBedrockAwsCliPath", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS CLI path" },
+    { key: "inferenceBedrockAwsDir", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS config directory" },
+    { key: "inferenceBedrockServiceTier", kind: "enum", group: "connection", scope: "3p", only: "bedrock",
+      label: "Bedrock service tier", options: ["flex", "priority"] },
+    { key: "inferenceBedrockSsoStartUrl", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS SSO start URL" },
+    { key: "inferenceBedrockSsoRegion", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS SSO region" },
+    { key: "inferenceBedrockSsoAccountId", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS SSO account ID" },
+    { key: "inferenceBedrockSsoRoleName", kind: "text", group: "connection", scope: "3p", only: "bedrock",
+      label: "AWS SSO role name" },
+
+    { key: "inferenceFoundryResource", kind: "text", group: "connection", scope: "3p", only: "foundry",
+      label: "Azure AI Foundry resource" },
+    { key: "inferenceFoundryApiKey", kind: "secret", group: "connection", scope: "3p", only: "foundry",
+      label: "Azure AI Foundry API key" },
+    { key: "inferenceFoundryAuthFlow", kind: "enum", group: "connection", scope: "3p", only: "foundry",
+      label: "Entra ID sign-in flow", options: ["device-code", "browser", "broker"] },
+    { key: "inferenceFoundryClientId", kind: "text", group: "connection", scope: "3p", only: "foundry",
+      label: "Entra ID client ID" },
+    { key: "inferenceFoundryTenantId", kind: "text", group: "connection", scope: "3p", only: "foundry",
+      label: "Entra ID tenant ID" },
+
+    { key: "inferenceAnthropicApiKey", kind: "secret", group: "connection", scope: "3p", only: "anthropic",
+      label: "Claude API key" },
+
+    { key: "inferenceCredentialHelper", kind: "text", group: "connection", scope: "3p",
+      label: "Credential helper script", note: "Absolute path; prints fresh credentials on demand." },
+    { key: "inferenceCredentialHelperTtlSec", kind: "int", group: "connection", scope: "3p",
+      label: "Credential helper TTL (s)" },
+    { key: "inferenceCredentialHelperTimeoutSec", kind: "int", group: "connection", scope: "3p",
+      label: "Credential helper timeout (s)", max: 600 },
+    { key: "inferenceCredentialHelperSilentRefreshEnabled", kind: "bool", group: "connection", scope: "3p",
+      label: "Re-run helper for silent refresh" },
+    { key: "inferenceSessionLifetimeSec", kind: "int", group: "connection", scope: "3p",
+      label: "Sign-in session lifetime (s)" },
+    { key: "allowOptionalClientAuth", kind: "bool", group: "connection", scope: "3p",
+      label: "Allow optional client-certificate fallback" },
+    { key: "userContentRendererUrl", kind: "text", group: "connection", scope: "3p",
+      label: "Artifact preview iframe origin" },
+    { key: "loginSsoOrgDomain", kind: "text", group: "connection", scope: "1p",
+      label: "SSO login domain" },
+    { key: "forceLoginOrgUUID", kind: "text", group: "connection", scope: "1p",
+      label: "Required organization UUID" },
+
+    // --- usage limits -------------------------------------------------------
+    { key: "inferenceMaxTokensPerWindow", kind: "int", group: "limits", scope: "3p",
+      label: "Max tokens per window" },
+    { key: "inferenceTokenWindowHours", kind: "int", group: "limits", scope: "3p",
+      label: "Token cap window (h)", max: 720 },
+
+    // --- surfaces, sandbox & tools -----------------------------------------
+    { key: "chatTabEnabled", kind: "bool", group: "sandbox", scope: "3p", label: "Chat tab" },
+    { key: "coworkTabEnabled", kind: "bool", group: "sandbox", scope: "3p", label: "Cowork tab", dflt: true },
+    { key: "isClaudeCodeForDesktopEnabled", kind: "bool", group: "sandbox", scope: "both",
+      label: "Code tab", dflt: true },
+    { key: "chatAdvancedFileAnalysisEnabled", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Advanced file analysis in Chat" },
+    { key: "autoModeEnabled", kind: "bool", group: "sandbox", scope: "3p", label: "Cowork Auto mode" },
+    { key: "toolSearchEnabled", kind: "bool", group: "sandbox", scope: "3p", label: "Tool search" },
+    { key: "allowedWorkspaceFolders", kind: "lines", group: "sandbox", scope: "both",
+      label: "Allowed workspace folders", note: "One absolute path per line. Empty means no restriction." },
+    { key: "coworkEgressAllowedHosts", kind: "lines", group: "sandbox", scope: "3p",
+      label: "Cowork egress allowlist", note: "One host per line; * opens the sandbox network." },
+    { key: "disabledBuiltinTools", kind: "lines", group: "sandbox", scope: "both",
+      label: "Disabled built-in tools", note: "One tool name per line, e.g. computer-use." },
+    { key: "builtinToolPolicy", kind: "json", group: "sandbox", scope: "both",
+      label: "Built-in tool policy", note: "JSON object of tool name to allow / ask / deny." },
+    { key: "disableBundledSkills", kind: "bool", group: "sandbox", scope: "both",
+      label: "Disable bundled skills and workflows" },
+    { key: "disableDeepLinkRegistration", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Disable claude:// deep links" },
+    { key: "disableWslSessions", kind: "bool", group: "sandbox", scope: "both",
+      label: "Block WSL sessions", note: "Windows-only upstream; no effect on Linux." },
+    { key: "requireCoworkFullVmSandbox", kind: "bool", group: "sandbox", scope: "1p",
+      label: "Require the full VM sandbox" },
+    { key: "secureVmFeaturesEnabled", kind: "bool", group: "sandbox", scope: "1p",
+      label: "Secure VM features" },
+    { key: "disableDeploymentModeChooser", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Disable claude.ai sign-in",
+      lock: "this is the key that locks a machine into 3P - it overrides the switch above, so this page never writes it" },
+
+    // --- connectors, MCP & extensions --------------------------------------
+    { key: "managedMcpServers", kind: "json", group: "connectors", scope: "3p",
+      label: "Managed MCP servers",
+      lock: "an MCP server entry can start a process, so it is read-only here - deploy it through /etc/claude-desktop/managed-settings.json" },
+    { key: "isLocalDevMcpEnabled", kind: "bool", group: "connectors", scope: "both",
+      label: "Allow user-added MCP servers", dflt: true },
+    { key: "mcpPersistentAlwaysAllowEnabled", kind: "bool", group: "connectors", scope: "3p",
+      label: "Allow persistent tool approvals", dflt: true },
+    { key: "isDesktopExtensionEnabled", kind: "bool", group: "connectors", scope: "both",
+      label: "Allow desktop extensions" },
+    { key: "isDesktopExtensionSignatureRequired", kind: "bool", group: "connectors", scope: "both",
+      label: "Require signed extensions" },
+    { key: "isDesktopExtensionDirectoryEnabled", kind: "bool", group: "connectors", scope: "1p",
+      label: "Show the extension directory" },
+    { key: "microsoftAuthBroker", kind: "enum", group: "connectors", scope: "3p",
+      label: "Microsoft 365 sign-in broker", options: ["auto", "disabled"] },
+    { key: "hardwareBuddyEnabled", kind: "bool", group: "connectors", scope: "1p",
+      label: "Allow Hardware Buddy devices", dflt: true },
+
+    // --- plugins ------------------------------------------------------------
+    { key: "organizationPluginsUrl", kind: "text", group: "plugins", scope: "3p",
+      label: "Organization plugins endpoint" },
+    { key: "allowedPluginMarketplaces", kind: "json", group: "plugins", scope: "3p",
+      label: "Allowed plugin marketplaces" },
+    { key: "orgPluginSettings", kind: "json", group: "plugins", scope: "3p",
+      label: "Organization plugin settings" },
+
+    // --- telemetry, updates & identity -------------------------------------
+    { key: "otlpEndpoint", kind: "text", group: "telemetry", scope: "3p",
+      label: "OpenTelemetry collector endpoint" },
+    { key: "otlpProtocol", kind: "enum", group: "telemetry", scope: "3p",
+      label: "OTLP protocol", options: ["http/protobuf", "http/json", "grpc"] },
+    { key: "otlpHeaders", kind: "json", group: "telemetry", scope: "3p", secret: true,
+      label: "OTLP exporter headers" },
+    { key: "otlpResourceAttributes", kind: "json", group: "telemetry", scope: "3p",
+      label: "OTLP resource attributes" },
+    { key: "otlpDesktopLogLevel", kind: "enum", group: "telemetry", scope: "3p",
+      label: "Desktop telemetry export level", options: ["off", "error", "warn", "info", "debug"] },
+    { key: "otlpContentCapture", kind: "json", group: "telemetry", scope: "both",
+      label: "Content capture categories", note: "JSON array, e.g. [\"prompt\", \"completion\"]." },
+    { key: "otlpTracesEnabled", kind: "bool", group: "telemetry", scope: "3p", label: "Export traces (beta)" },
+    { key: "disableEssentialTelemetry", kind: "bool", group: "telemetry", scope: "3p",
+      label: "Block essential telemetry", dflt: true },
+    { key: "disableNonessentialTelemetry", kind: "bool", group: "telemetry", scope: "3p",
+      label: "Block nonessential telemetry", dflt: true },
+    { key: "disableNonessentialServices", kind: "bool", group: "telemetry", scope: "3p",
+      label: "Block nonessential services" },
+    { key: "disableAutoUpdates", kind: "bool", group: "telemetry", scope: "both",
+      label: "Block auto-updates",
+      note: "Packaged builds are updated by your package manager, so this only silences the in-app updater." },
+    { key: "autoUpdaterEnforcementHours", kind: "int", group: "telemetry", scope: "both",
+      label: "Auto-update enforcement window (h)", max: 72 },
+    { key: "deploymentOrganizationUuid", kind: "text", group: "telemetry", scope: "3p",
+      label: "Organization UUID" },
+    { key: "enduserAttribution", kind: "bool", group: "telemetry", scope: "3p", label: "End-user attribution" },
+
+    // --- appearance & branding ---------------------------------------------
+    { key: "deploymentDisplayName", kind: "text", group: "appearance", scope: "3p",
+      label: "Deployment display name" },
+    { key: "deploymentDisplaySubtitle", kind: "text", group: "appearance", scope: "3p",
+      label: "Deployment display subtitle" },
+    { key: "banner", kind: "json", group: "appearance", scope: "both", label: "Organization banner" },
+    { key: "disableFeatureDiscovery", kind: "bool", group: "appearance", scope: "3p",
+      label: "Hide feature announcements" },
+
+    // --- bootstrap & import -------------------------------------------------
+    { key: "bootstrapUrl", kind: "text", group: "source", scope: "3p",
+      label: "Bootstrap config URL",
+      note: "A remote config endpoint. Counts as an inference block on its own, so it can select 3P without a provider." },
+    { key: "bootstrapEnabled", kind: "bool", group: "source", scope: "3p",
+      label: "Use the bootstrap config", dflt: true },
+    { key: "bootstrapOidc", kind: "json", group: "source", scope: "3p", secret: true,
+      label: "Bootstrap OIDC parameters" },
+    { key: "claudeAiImport", kind: "bool", group: "source", scope: "3p", label: "Allow claude.ai data import" }
+  ];
+
+  var __cdbEx_DEPLOY_GROUPS = [
+    { key: "connection", label: "Inference & connection" },
+    { key: "limits", label: "Usage limits" },
+    { key: "sandbox", label: "Surfaces, sandbox & tools" },
+    { key: "connectors", label: "Connectors, MCP & extensions" },
+    { key: "plugins", label: "Plugins" },
+    { key: "telemetry", label: "Telemetry, updates & identity" },
+    { key: "appearance", label: "Appearance & branding" },
+    { key: "source", label: "Bootstrap & import" }
+  ];
+
+  function __cdbEx_deployKey(key) {
+    for (var i = 0; i < __cdbEx_DEPLOY_KEYS.length; i++) {
+      if (__cdbEx_DEPLOY_KEYS[i].key === key) return __cdbEx_DEPLOY_KEYS[i];
+    }
+    return null;
+  }
+
+  function __cdbEx_readJson(file) {
+    var raw;
+    try {
+      raw = _fs.readFileSync(file, "utf8");
+    } catch (e) {
+      return { missing: e.code === "ENOENT", error: e.code === "ENOENT" ? "" : e.message };
+    }
+    try {
+      var v = JSON.parse(raw.charCodeAt(0) === 65279 ? raw.slice(1) : raw);
+      if (!v || typeof v !== "object" || Array.isArray(v)) {
+        return { error: "top level must be a JSON object" };
+      }
+      return { value: v };
+    } catch (e2) {
+      return { error: "invalid JSON (" + e2.message + ")" };
+    }
+  }
+
+  // Atomic, 0600, parent dir 0700 - the same shape upstream writes these files
+  // with, because they can hold inference credentials.
+  function __cdbEx_writeJson(file, value) {
+    var tmp = file + ".cdb-tmp";
+    try {
+      _fs.mkdirSync(_path.dirname(file), { recursive: true, mode: __cdbEx_DMODE });
+    } catch (e) {
+      if (e.code !== "EEXIST") return "cannot create " + _path.dirname(file) + ": " + e.message;
+    }
+    try {
+      _fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { encoding: "utf8", mode: __cdbEx_FMODE });
+      _fs.renameSync(tmp, file);
+    } catch (e2) {
+      try { _fs.unlinkSync(tmp); } catch (e3) {}
+      return "cannot write " + file + ": " + e2.message;
+    }
+    return "";
+  }
+
+  // The managed file is only reported, never written: it needs root, and when it
+  // is valid it disables the local source completely. Its ownership rules are
+  // upstream's, mirrored here so the page can say WHY it is being ignored.
+  function __cdbEx_managedState() {
+    var out = { present: false, usable: false, keys: [], provider: null, locksSignIn: false, error: "" };
+    var st;
+    try {
+      st = _fs.lstatSync(__cdbEx_ETC_FILE);
+    } catch (e) {
+      if (e.code !== "ENOENT") out.error = e.message;
+      return out;
+    }
+    out.present = true;
+    if (!st.isFile()) { out.error = "not a regular file"; return out; }
+    if (st.uid !== 0 || (st.mode & 18) !== 0) {
+      out.error = "ignored by Claude Desktop: must be owned by root and not group- or world-writable";
+      return out;
+    }
+    try {
+      var dst = _fs.lstatSync(__cdbEx_ETC_DIR);
+      if (dst.isSymbolicLink() || !dst.isDirectory() || dst.uid !== 0 || (dst.mode & 18) !== 0) {
+        out.error = "ignored by Claude Desktop: " + __cdbEx_ETC_DIR +
+          " must be owned by root and not group- or world-writable";
+        return out;
+      }
+    } catch (e2) {
+      out.error = e2.message;
+      return out;
+    }
+    var read = __cdbEx_readJson(__cdbEx_ETC_FILE);
+    if (!read.value) { out.error = "ignored by Claude Desktop: " + (read.error || "unreadable"); return out; }
+    var cfg = read.value;
+    out.keys = Object.keys(cfg);
+    // One unknown key makes upstream discard the WHOLE managed file, so name it
+    // rather than letting the user wonder why their policy does nothing.
+    var unknown = out.keys.filter(function (k) { return !__cdbEx_deployKey(k); });
+    if (unknown.length) {
+      out.error = "carries key(s) this build does not know (" + unknown.slice(0, 4).join(", ") +
+        ") - Claude Desktop ignores the whole file";
+      return out;
+    }
+    out.usable = true;
+    out.provider = typeof cfg.inferenceProvider === "string" ? cfg.inferenceProvider : null;
+    out.locksSignIn = cfg.disableDeploymentModeChooser === true;
+    return out;
+  }
+
+  function __cdbEx_meta(paths) {
+    var read = __cdbEx_readJson(paths.metaFile);
+    var meta = read.value || {};
+    var entries = Array.isArray(meta.entries) ? meta.entries.filter(function (e) {
+      return e && typeof e === "object" && typeof e.id === "string" && /^[a-f0-9-]{36}$/.test(e.id);
+    }) : [];
+    var applied = typeof meta.appliedId === "string" && /^[a-f0-9-]{36}$/.test(meta.appliedId)
+      ? meta.appliedId : "";
+    return {
+      raw: meta,
+      error: read.error || "",
+      appliedId: applied,
+      entries: entries.map(function (e) {
+        return { id: e.id, name: typeof e.name === "string" ? e.name : "" };
+      })
+    };
+  }
+
+  function __cdbEx_entryFile(paths, id) {
+    return _path.join(paths.libDir, id + ".json");
+  }
+
+  // A value the remote page may see. Secrets never cross: it learns THAT one is
+  // stored, never what it is, and echoing the placeholder back keeps it.
+  function __cdbEx_deployValue(entry, value) {
+    if (value === undefined) return undefined;
+    if (entry.secret || entry.kind === "secret") return __cdbEx_KEEP;
+    return value;
+  }
+
+  function __cdbEx_deployProjection(cfg) {
+    var out = {};
+    var unknown = [];
+    Object.keys(cfg || {}).forEach(function (k) {
+      var entry = __cdbEx_deployKey(k);
+      if (!entry) { unknown.push(k); return; }
+      out[k] = __cdbEx_deployValue(entry, cfg[k]);
+    });
+    return { values: out, unknown: unknown };
+  }
+
+  // Does this config select 3P at all? Upstream's own test: an inference block
+  // (i.e. a provider) or an enabled bootstrap URL.
+  function __cdbEx_selects3p(cfg) {
+    if (!cfg) return false;
+    if (typeof cfg.inferenceProvider === "string" && cfg.inferenceProvider) return true;
+    return typeof cfg.bootstrapUrl === "string" && !!cfg.bootstrapUrl && cfg.bootstrapEnabled !== false;
+  }
+
+  function __cdbEx_persistedMode(paths) {
+    var read = __cdbEx_readJson(paths.modeFile);
+    var m = read.value && read.value[__cdbEx_MODE_KEY];
+    return m === "1p" || m === "3p" ? m : null;
+  }
+
+  // What the app is running RIGHT NOW. The relocated userData is the honest
+  // answer whenever the relocation is in play at all; with CLAUDE_USER_DATA_DIR
+  // set upstream skips it entirely, and then the config sources are all we have.
+  function __cdbEx_runningMode(expected) {
+    if (process.env.CLAUDE_USER_DATA_DIR) return expected;
+    return /-3p$/.test(_app.getPath("userData")) ? "3p" : "1p";
+  }
+
+  function __cdbEx_deployState() {
+    var paths = __cdbEx_deployPaths();
+    var managed = __cdbEx_managedState();
+    var meta = __cdbEx_meta(paths);
+    var local = {
+      appliedId: meta.appliedId,
+      entries: meta.entries,
+      present: false,
+      file: "",
+      values: {},
+      unknown: [],
+      error: meta.error
+    };
+    if (meta.appliedId) {
+      local.file = __cdbEx_entryFile(paths, meta.appliedId);
+      var read = __cdbEx_readJson(local.file);
+      if (read.value) {
+        local.present = true;
+        var proj = __cdbEx_deployProjection(read.value);
+        local.values = proj.values;
+        local.unknown = proj.unknown;
+        local.selects3p = __cdbEx_selects3p(read.value);
+      } else if (!read.missing) {
+        local.error = read.error;
+      }
+    }
+    var persisted = __cdbEx_persistedMode(paths);
+    // Same decision the bootstrap makes, in the same order.
+    var source = managed.usable && managed.keys.length ? "managed" : (local.present ? "local" : "none");
+    var active = source === "managed"
+      ? { provider: managed.provider, selects3p: !!managed.provider, locksSignIn: managed.locksSignIn }
+      : { provider: local.values.inferenceProvider || null, selects3p: !!local.selects3p, locksSignIn: false };
+    var expected = active.selects3p && (active.locksSignIn || persisted !== "1p") ? "3p" : "1p";
+    return {
+      paths: paths,
+      managed: managed,
+      local: local,
+      source: source,
+      persisted: persisted,
+      expected: expected,
+      running: __cdbEx_runningMode(expected),
+      editable: source !== "managed",
+      locksSignIn: active.locksSignIn
+    };
+  }
+
+  // Coerce one page value into what the schema accepts, or explain why not.
+  // null / "" always means "remove the key".
+  function __cdbEx_deployCoerce(entry, value) {
+    if (value === null || value === undefined) return { del: true };
+    if (entry.secret || entry.kind === "secret") {
+      if (value === __cdbEx_KEEP) return { keep: true };
+    }
+    switch (entry.kind) {
+      case "bool":
+        if (typeof value !== "boolean") return { error: entry.key + " must be true or false" };
+        return { value: value };
+      case "enum":
+        if (typeof value !== "string") return { error: entry.key + " must be a string" };
+        if (!value) return { del: true };
+        if (entry.options.indexOf(value) < 0) {
+          return { error: entry.key + " must be one of " + entry.options.join(", ") };
+        }
+        return { value: value };
+      case "int":
+        if (typeof value === "string" && !value.trim()) return { del: true };
+        var n = typeof value === "number" ? value : Number(value);
+        if (!isFinite(n) || Math.floor(n) !== n || n <= 0) {
+          return { error: entry.key + " must be a positive whole number" };
+        }
+        if (entry.max && n > entry.max) return { error: entry.key + " must be at most " + entry.max };
+        return { value: n };
+      case "text":
+      case "secret":
+        if (typeof value !== "string") return { error: entry.key + " must be a string" };
+        if (!value.trim()) return { del: true };
+        if (value.length > 4096) return { error: entry.key + " is too long" };
+        return { value: value.trim() };
+      case "lines":
+      case "models":
+        var list = Array.isArray(value) ? value : String(value).split("\n");
+        list = list.map(function (v) { return typeof v === "string" ? v.trim() : v; })
+          .filter(function (v) { return typeof v !== "string" || v.length > 0; });
+        if (!list.length) return { del: true };
+        if (list.length > 200) return { error: entry.key + " has too many entries" };
+        for (var i = 0; i < list.length; i++) {
+          if (typeof list[i] !== "string") return { error: entry.key + " must be a list of strings" };
+          if (list[i].length > 300) return { error: entry.key + " has an over-long entry" };
+        }
+        return { value: list };
+      case "json":
+        var parsed = value;
+        if (typeof value === "string") {
+          if (!value.trim()) return { del: true };
+          try { parsed = JSON.parse(value); } catch (e) { return { error: entry.key + ": " + e.message }; }
+        }
+        if (parsed === null || typeof parsed !== "object") {
+          return { error: entry.key + " must be a JSON object or array" };
+        }
+        if (JSON.stringify(parsed).length > 20000) return { error: entry.key + " is too large" };
+        return { value: parsed };
+      default:
+        return { error: "unsupported kind for " + entry.key };
+    }
+  }
+
+  // Mutate the APPLIED config entry, creating the library the way upstream does
+  // when it has none: one entry named "Default", applied. Editing the applied
+  // entry rather than adding our own is what keeps this page and upstream's 3P
+  // Setup window looking at the same configuration.
+  function __cdbEx_writeEntry(mutate) {
+    var paths = __cdbEx_deployPaths();
+    var meta = __cdbEx_meta(paths);
+    if (meta.error) return { ok: false, error: paths.metaFile + ": " + meta.error };
+
+    var id = meta.appliedId;
+    var entries = meta.entries.slice();
+    var created = false;
+    if (!id) {
+      id = entries.length ? entries[0].id : __cdbEx_uuid();
+      if (!entries.length) { entries = [{ id: id, name: "Default" }]; created = true; }
+    }
+    var file = __cdbEx_entryFile(paths, id);
+    var read = __cdbEx_readJson(file);
+    if (read.error) return { ok: false, error: file + ": " + read.error };
+    var cfg = read.value || {};
+
+    var err = mutate(cfg);
+    if (err) return { ok: false, error: err };
+
+    var w = __cdbEx_writeJson(file, cfg);
+    if (w) return { ok: false, error: w };
+    if (meta.appliedId !== id || created || !meta.raw.entries) {
+      var next = { appliedId: id, entries: entries.length ? entries : [{ id: id, name: "Default" }] };
+      Object.keys(meta.raw).forEach(function (k) {
+        if (k !== "appliedId" && k !== "entries") next[k] = meta.raw[k];
+      });
+      var w2 = __cdbEx_writeJson(paths.metaFile, next);
+      if (w2) return { ok: false, error: "config written but not applied: " + w2 };
+    }
+    return { ok: true, id: id, file: file, created: created, config: cfg };
+  }
+
+  // --- opening our own files ------------------------------------------------
+  // The page asks for a LOCATION BY NAME and never sends a path: shell.openPath
+  // hands a file to the desktop's default handler, so letting remote code choose
+  // the target would be a way to launch things. Every name below resolves to one
+  // of the files this package writes (plus the read-only managed policy file).
+  function __cdbEx_revealTarget(name) {
+    var p = __cdbEx_paths();
+    var d = __cdbEx_deployPaths();
+    switch (name) {
+      case "config-json": return p.json;
+      case "config-jsonc": return p.jsonc;
+      case "user-data": return p.userData;
+      case "deploy-config":
+        var meta = __cdbEx_meta(d);
+        return meta.appliedId ? __cdbEx_entryFile(d, meta.appliedId) : d.libDir;
+      case "deploy-mode": return d.modeFile;
+      case "deploy-meta": return d.metaFile;
+      case "deploy-lib": return d.libDir;
+      case "managed": return __cdbEx_ETC_FILE;
+      default: return "";
+    }
+  }
+
+  function __cdbEx_uuid() {
+    try {
+      var c = require("crypto");
+      if (c && typeof c.randomUUID === "function") return c.randomUUID();
+    } catch (e) {}
+    var hex = "0123456789abcdef";
+    var out = "";
+    for (var i = 0; i < 36; i++) {
+      out += (i === 8 || i === 13 || i === 18 || i === 23) ? "-"
+        : hex[Math.floor(Math.random() * 16)];
+    }
+    return out;
+  }
+
   // --- sender validation ---------------------------------------------------
   // Only the main frame of an http(s) webContents, i.e. the mainView that our
   // preload bridge lives in. Subframes never get the preload, but reject them
@@ -413,6 +1050,241 @@
       var res = __cdbEx_writeOverrides(function (o) { delete o[id]; });
       if (res.ok) __cdbEx_log("override " + id + " removed from " + res.path);
       return res;
+    },
+
+    // --- deployment mode ---------------------------------------------------
+
+    "cdb-deploy:read": function () {
+      var s = __cdbEx_deployState();
+      return {
+        ok: true,
+        running: s.running,
+        persisted: s.persisted,
+        expected: s.expected,
+        source: s.source,
+        editable: s.editable,
+        locksSignIn: s.locksSignIn,
+        paths: s.paths,
+        managed: s.managed,
+        local: s.local,
+        keys: __cdbEx_DEPLOY_KEYS,
+        groups: __cdbEx_DEPLOY_GROUPS,
+        keepToken: __cdbEx_KEEP
+      };
+    },
+
+    // The whole point of the panel: persist upstream's own escape hatch. Writing
+    // "1p" is what makes a machine with a stored 3P config boot personal again.
+    // "clear" removes the key instead - the same value upstream's own
+    // setDeploymentMode takes - so the config sources decide again.
+    "cdb-deploy:mode": function (mode) {
+      if (mode !== "1p" && mode !== "3p" && mode !== "clear") {
+        return { ok: false, error: "mode must be \"1p\", \"3p\" or \"clear\"" };
+      }
+      var s = __cdbEx_deployState();
+      if (mode === "clear") {
+        var cur = __cdbEx_readJson(s.paths.modeFile);
+        if (cur.missing) return { ok: true, mode: null, expected: s.expected, unchanged: true };
+        if (cur.error) return { ok: false, error: s.paths.modeFile + ": " + cur.error };
+        if (cur.value[__cdbEx_MODE_KEY] === undefined) {
+          return { ok: true, mode: null, expected: s.expected, unchanged: true };
+        }
+        delete cur.value[__cdbEx_MODE_KEY];
+        var cw = __cdbEx_writeJson(s.paths.modeFile, cur.value);
+        if (cw) return { ok: false, error: cw };
+        __cdbEx_log("deploymentMode cleared in " + s.paths.modeFile);
+        var cleared = __cdbEx_deployState();
+        return { ok: true, mode: null, expected: cleared.expected, path: s.paths.modeFile };
+      }
+      if (mode === "1p" && s.locksSignIn) {
+        return { ok: false, error: "the managed policy in " + __cdbEx_ETC_FILE +
+          " sets disableDeploymentModeChooser, which overrides the deploymentMode key - 1P cannot be selected here" };
+      }
+      if (mode === "3p" && s.source === "none") {
+        return { ok: false, error: "no third-party configuration is stored yet - pick a provider below first, then switch" };
+      }
+      if (mode === "3p" && s.source === "local" && !s.local.selects3p) {
+        return { ok: false, error: "the stored configuration has no inference provider and no bootstrap URL, so it would still boot 1P - set a provider below first" };
+      }
+      var read = __cdbEx_readJson(s.paths.modeFile);
+      if (read.error) return { ok: false, error: s.paths.modeFile + ": " + read.error };
+      var cfg = read.value || {};
+      cfg[__cdbEx_MODE_KEY] = mode;
+      var w = __cdbEx_writeJson(s.paths.modeFile, cfg);
+      if (w) return { ok: false, error: w };
+      __cdbEx_log("deploymentMode=" + mode + " persisted to " + s.paths.modeFile);
+      return { ok: true, mode: mode, path: s.paths.modeFile, expected: mode };
+    },
+
+    "cdb-deploy:set": function (key, value) {
+      var entry = __cdbEx_deployKey(key);
+      if (!entry) return { ok: false, error: "unknown configuration key" };
+      if (entry.lock) return { ok: false, error: key + " is read-only here: " + entry.lock };
+      var state = __cdbEx_deployState();
+      if (!state.editable) {
+        return { ok: false, error: "the managed policy in " + __cdbEx_ETC_FILE +
+          " is active and replaces the local configuration - edit that file instead" };
+      }
+      var coerced = __cdbEx_deployCoerce(entry, value);
+      if (coerced.error) return { ok: false, error: coerced.error };
+      if (coerced.keep) return { ok: true, unchanged: true };
+      var res = __cdbEx_writeEntry(function (cfg) {
+        if (coerced.del) delete cfg[key];
+        else cfg[key] = coerced.value;
+        return "";
+      });
+      if (!res.ok) return res;
+      __cdbEx_log((coerced.del ? "removed " : "set ") + key + " in " + res.file);
+      var after = __cdbEx_deployState();
+      return {
+        ok: true, path: res.file, created: res.created,
+        value: coerced.del ? null : __cdbEx_deployValue(entry, coerced.value),
+        expected: after.expected, persisted: after.persisted, source: after.source
+      };
+    },
+
+    // Undo a session of edits in one go: every key goes, the entry file and the
+    // library metadata stay, so the configuration is still listed and can be
+    // filled in again. A config with no keys carries no inference block, so the
+    // next start is 1P.
+    "cdb-deploy:clear": function () {
+      var state = __cdbEx_deployState();
+      if (!state.editable) {
+        return { ok: false, error: "the managed policy in " + __cdbEx_ETC_FILE +
+          " is active and replaces the local configuration - edit that file instead" };
+      }
+      if (!state.local.present) return { ok: true, cleared: 0, unchanged: true };
+      var removed = 0;
+      var res = __cdbEx_writeEntry(function (cfg) {
+        Object.keys(cfg).forEach(function (k) { delete cfg[k]; removed++; });
+        return "";
+      });
+      if (!res.ok) return res;
+      __cdbEx_log("cleared " + removed + " key(s) from " + res.file);
+      var after = __cdbEx_deployState();
+      return { ok: true, cleared: removed, path: res.file, expected: after.expected, source: after.source };
+    },
+
+    // Switch between the configurations stored in the library, or apply none at
+    // all - the non-destructive way out of 3P: the entry files stay on disk.
+    "cdb-deploy:apply": function (id) {
+      var paths = __cdbEx_deployPaths();
+      var meta = __cdbEx_meta(paths);
+      if (meta.error) return { ok: false, error: paths.metaFile + ": " + meta.error };
+      var wanted = typeof id === "string" ? id : "";
+      if (wanted && !meta.entries.some(function (e) { return e.id === wanted; })) {
+        return { ok: false, error: "unknown configuration id" };
+      }
+      var next = { appliedId: wanted, entries: meta.entries };
+      Object.keys(meta.raw).forEach(function (k) {
+        if (k !== "appliedId" && k !== "entries") next[k] = meta.raw[k];
+      });
+      var w = __cdbEx_writeJson(paths.metaFile, next);
+      if (w) return { ok: false, error: w };
+      __cdbEx_log("applied config id " + (wanted || "(none)") + " in " + paths.metaFile);
+      var after = __cdbEx_deployState();
+      return { ok: true, appliedId: wanted, expected: after.expected, path: paths.metaFile };
+    },
+
+    // The escape hatch for keys this page renders as JSON, and the honest view of
+    // what is actually on disk - with every secret replaced by the placeholder,
+    // which is written back unchanged.
+    "cdb-deploy:raw": function () {
+      var s = __cdbEx_deployState();
+      var body = {};
+      Object.keys(s.local.values).forEach(function (k) { body[k] = s.local.values[k]; });
+      return {
+        ok: true,
+        text: JSON.stringify(body, null, 2),
+        file: s.local.file || _path.join(s.paths.libDir, "<new>.json"),
+        unknown: s.local.unknown,
+        editable: s.editable
+      };
+    },
+
+    "cdb-deploy:save-raw": function (text) {
+      if (typeof text !== "string" || text.length > 200000) {
+        return { ok: false, error: "the configuration must be a JSON object" };
+      }
+      var state = __cdbEx_deployState();
+      if (!state.editable) {
+        return { ok: false, error: "the managed policy in " + __cdbEx_ETC_FILE +
+          " is active and replaces the local configuration - edit that file instead" };
+      }
+      var parsed;
+      try {
+        parsed = JSON.parse(text.trim() || "{}");
+      } catch (e) {
+        return { ok: false, error: "invalid JSON: " + e.message };
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { ok: false, error: "the top level must be a JSON object" };
+      }
+      var next = {};
+      var keys = Object.keys(parsed);
+      for (var i = 0; i < keys.length; i++) {
+        var entry = __cdbEx_deployKey(keys[i]);
+        if (!entry) {
+          return { ok: false, error: "\"" + keys[i] + "\" is not a configuration key this build knows" };
+        }
+        if (entry.lock) {
+          return { ok: false, error: keys[i] + " is read-only here: " + entry.lock };
+        }
+        var coerced = __cdbEx_deployCoerce(entry, parsed[keys[i]]);
+        if (coerced.error) return { ok: false, error: coerced.error };
+        if (coerced.keep) { next[keys[i]] = __cdbEx_KEEP; continue; }
+        if (!coerced.del) next[keys[i]] = coerced.value;
+      }
+      var res = __cdbEx_writeEntry(function (cfg) {
+        // Kept secrets carry the placeholder: take the stored value across, then
+        // drop everything the new document no longer mentions.
+        Object.keys(next).forEach(function (k) {
+          if (next[k] === __cdbEx_KEEP) {
+            if (cfg[k] === undefined) delete next[k];
+            else next[k] = cfg[k];
+          }
+        });
+        Object.keys(cfg).forEach(function (k) { delete cfg[k]; });
+        Object.keys(next).forEach(function (k) { cfg[k] = next[k]; });
+        return "";
+      });
+      if (!res.ok) return res;
+      __cdbEx_log("configuration replaced from the raw editor in " + res.file);
+      var after = __cdbEx_deployState();
+      return { ok: true, path: res.file, expected: after.expected, source: after.source };
+    },
+
+    // Open one of OUR files in the desktop's default handler, or show it in the
+    // file manager. `name` is a fixed location name, never a path (see
+    // __cdbEx_revealTarget); "folder" is used automatically for anything that
+    // does not exist yet, so the button never just fails silently.
+    "cdb-extra:reveal": function (name, how) {
+      var target = __cdbEx_revealTarget(String(name || ""));
+      if (!target) return { ok: false, error: "unknown location" };
+      var shell = _electron.shell;
+      if (!shell) return { ok: false, error: "this build exposes no shell integration" };
+      var isDir = false;
+      var exists = false;
+      try {
+        var st = _fs.statSync(target);
+        exists = true;
+        isDir = st.isDirectory();
+      } catch (e) {}
+      if (exists && !isDir && how === "folder") {
+        try { shell.showItemInFolder(target); } catch (e2) {
+          return { ok: false, error: e2.message };
+        }
+        return { ok: true, opened: target, mode: "folder" };
+      }
+      var open = exists ? target : _path.dirname(target);
+      return Promise.resolve(shell.openPath(open)).then(function (msg) {
+        // openPath resolves with a NON-EMPTY string when the desktop could not
+        // open it - a rejected promise is not the failure mode to watch for.
+        if (msg) return { ok: false, error: msg };
+        return { ok: true, opened: open, mode: open === target ? (isDir ? "folder" : "file") : "folder" };
+      }, function (err) {
+        return { ok: false, error: (err && err.message) || String(err) };
+      });
     },
 
     "cdb-app:relaunch": function () {

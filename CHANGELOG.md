@@ -2,6 +2,32 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-07-31
+
+### Settings → Extra → Deployment: a 1P/3P switch, and the whole 3P config as toggles
+
+Third-party inference was a one-way door. Turning it on took a root shell to place `/etc/claude-desktop/managed-settings.json`, and getting back to a personal claude.ai login took knowing that deleting that file is *not* enough - the app keeps its own stored 3P config and boots from that, so the only way out was a launcher flag or hand-editing JSON in a directory most people never look at.
+
+The new **Deployment** panel makes both directions a button. It has:
+
+- **The mode switch.** `1P` / `3P`, showing what the running session is, what the next start will use, and which config source decided that. It writes upstream's own `deploymentMode` key, which overrides a stored 3P configuration - so a machine that got stuck in 3P is one click and one restart from personal again, with nothing deleted.
+- **The configuration, as a form.** Every key of the managed-settings schema this build accepts, grouped the way upstream's own schema groups it: provider and credentials, model list, surfaces (Chat/Cowork/Code), workspace and egress allowlists, disabled built-in tools, connectors and extensions, plugins, telemetry, update policy, usage limits, branding, bootstrap. Booleans are switches, enums are selects, lists are one-per-line, and a key you never touch stays absent from the file so Claude Desktop keeps its own default. Provider-specific fields stay hidden until that provider is selected.
+- **The stored configurations.** The panel edits the *applied* entry of the same store upstream's 3P Setup wizard uses, so the two show each other's values. Its *Active configuration* picker switches between them - and picking **None** boots 1P while leaving every file on disk.
+- **A raw JSON editor** for anything the form does not cover, which rejects a key this build does not know instead of writing a file the app would then ignore whole.
+- **Undo for everything.** Each set key has a `clear` chip, the mode switch has one that forgets the saved choice so the stored configuration decides again, and the section heading has a `clear all` (two clicks, because it throws work away) for a handful of toggles flipped by mistake. Clearing never deletes a configuration file - the entry stays listed and can be filled in again.
+
+Everything is written to your own profile directory (`~/.config/Claude-3p/`, per profile), `0600` in a `0700` dir, using only files upstream already reads - so no `sudo`, and no patch to the app's startup path. Stored credentials are write-only: the panel can replace one but never displays it, and it will not hand one to the claude.ai page it renders in. Two keys stay read-only there and remain yours to deploy through the policy file: `disableDeploymentModeChooser`, which is precisely what locks a machine into 3P, and `managedMcpServers`, whose entries can start a process. A valid `/etc/claude-desktop/managed-settings.json` still wins over all of it; the panel says so and turns read-only.
+
+Also in this release: **`betaFeaturesEnabled` no longer exists upstream.** If your policy file still carries it, remove it - one unrecognized key makes Claude Desktop discard the entire managed file. [docs/third-party-inference.md](docs/third-party-inference.md) documents the new route and this trap.
+
+### Themes: Built-in and Community are one "Common" section
+
+Whether a palette ships as a built-in or came from the community collection is a packaging detail, not something to pick a theme by - so the two sections are now one **Common** list, alphabetically, in both the Settings panel and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker. Your themes and Gaming are unchanged.
+
+### The Extra panels link the files they write
+
+Each panel ends in the config files behind it, as links: click the path to open the file in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
+
 ## 2026-07-30
 
 ### The project is now claude-desktop-extra

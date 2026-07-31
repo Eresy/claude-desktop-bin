@@ -160,7 +160,7 @@ const FIXTURE_BARE = dialog(`
 const DRIVER = String.raw`
 var SVGNS = "http://www.w3.org/2000/svg";
 var ICON_SEL = '[data-cds="Icon"]';
-var LABELS = ["Themes", "Features"];
+var LABELS = ["Themes", "Features", "Deployment"];
 
 function navbox() { return document.getElementById("navbox"); }
 
@@ -176,6 +176,18 @@ function ourItems() {
 
 function controlOf(item) {
   return item.classList.contains("cdbx-item-btn") ? item : item.querySelector(".cdbx-item-btn");
+}
+
+// The alpha of a computed colour, whatever notation it came back in: rgb() and
+// rgba(), or the color(srgb r g b / a) that color-mix() serialises to. Counting
+// the components is what keeps rgb()'s blue channel from reading as an alpha.
+function alphaOf(color) {
+  var inside = /\(([^)]*)\)/.exec(color || "");
+  if (!inside) return 1;
+  var halves = inside[1].split("/");
+  if (halves.length > 1) return parseFloat(halves[1]);
+  var nums = inside[1].split(/[,\s]+/).filter(function (t) { return /^[\d.]+%?$/.test(t); });
+  return nums.length >= 4 ? parseFloat(nums[3]) : 1;
 }
 
 function labelSpans(control) {
@@ -240,6 +252,173 @@ async function featuresPanel(featuresItem) {
   glow.click();
   await sleep(60);
   ok(glow.getAttribute("aria-checked") === "true", "clicking the glow switch turns it on");
+
+  const fileRows = panel.querySelectorAll(".cdbx-pathrow");
+  ok(fileRows.length === 2, "the Features panel links both override files (" + fileRows.length + ")");
+  if (fileRows.length === 2) {
+    fileRows[0].querySelector(".cdbx-pathbtn").click();
+    await sleep(40);
+    ok(window.__revealCalls.indexOf("config-json:folder") >= 0,
+       "the folder button of the .json works: " + window.__revealCalls.join(","));
+  }
+}
+
+// The Deployment panel: the 1P/3P switch writes the persisted deploymentMode and
+// the managed-settings keys are rendered from the catalog the main process sends.
+// The fixture below runs in 1P with a stored gateway config, which is exactly the
+// state where the switch matters.
+async function deployPanel(deployItem) {
+  deployItem.click();
+  await sleep(140);
+  const panel = document.querySelector(".cdbx-panel");
+  ok(!!panel, "the Deployment panel is mounted");
+  if (!panel) return;
+
+  // --- the mode switch
+  const seg = panel.querySelectorAll(".cdbx-seg-b");
+  ok(seg.length === 2, "the mode switch offers exactly 1P and 3P (" + seg.length + ")");
+  ok(seg[0].textContent === "1P" && seg[1].textContent === "3P", "labelled 1P and 3P");
+  ok(seg[0].getAttribute("aria-pressed") === "true",
+     "the pressed side is the mode the next start will use");
+  ok(panel.textContent.indexOf("Running now: Personal") >= 0, "the running mode is stated");
+  ok(!!panel.querySelector(".cdbx-notice.cdbx-hide"),
+     "the restart notice is hidden while the running and next modes agree");
+
+  seg[1].click();
+  await sleep(80);
+  ok(window.__deployCalls.indexOf("mode:3p") >= 0, "clicking 3P persists deploymentMode=3p");
+  ok(seg[1].getAttribute("aria-pressed") === "true" && seg[0].getAttribute("aria-pressed") === "false",
+     "the switch moves to 3P");
+  const notice = panel.querySelector(".cdbx-notice");
+  ok(notice && !notice.classList.contains("cdbx-hide"),
+     "and the restart notice appears, because the running session is still 1P");
+  ok(!!panel.querySelector(".cdbx-notice .cdbx-btn"), "with a restart button");
+
+  // --- undoing the mode choice: the same "clear" the Features panel offers for a
+  //     flag override. Without it, one click on 1P/3P is permanent.
+  let modeClear = panel.querySelector(".cdbx-mode .cdbx-clear");
+  ok(!!modeClear, "the mode switch has a clear chip");
+  ok(!modeClear.classList.contains("cdbx-hide"),
+     "shown, because this fixture has a saved deploymentMode");
+  modeClear.click();
+  await sleep(60);
+  ok(window.__deployCalls.indexOf("mode:clear") >= 0,
+     "clicking it clears the persisted key rather than writing another mode: " +
+     window.__deployCalls.join(","));
+  ok(modeClear.classList.contains("cdbx-hide"),
+     "and it hides itself, because there is nothing left to clear");
+  ok(panel.querySelector(".cdbx-state").textContent.indexOf("deploymentMode") < 0,
+     "the next-start line stops citing a saved choice");
+
+  // --- keys: rendered from the catalog, grouped, and provider-filtered
+  const rows = panel.querySelectorAll(".cdbx-sections .cdbx-row");
+  ok(rows.length >= 4, "the configuration keys are rendered (" + rows.length + ")");
+  const keyOf = (row) => row.querySelector(".cdbx-id").textContent;
+  const keys = Array.from(rows).map(keyOf);
+  ok(keys.indexOf("inferenceGatewayBaseUrl") >= 0,
+     "the stored provider's own keys are shown: " + keys.join(","));
+  ok(keys.indexOf("inferenceVertexProjectId") < 0,
+     "another provider's keys stay hidden until it is selected");
+  const check = panel.querySelector(".cdbx-check input");
+  check.click();
+  await sleep(40);
+  ok(Array.from(panel.querySelectorAll(".cdbx-sections .cdbx-row")).map(keyOf)
+       .indexOf("inferenceVertexProjectId") >= 0,
+     "\"show every provider\" brings them back");
+  check.click();
+  await sleep(40);
+
+  // --- a boolean writes through
+  const chat = Array.from(panel.querySelectorAll(".cdbx-sections .cdbx-row"))
+    .find(function (r) { return keyOf(r) === "chatTabEnabled"; });
+  ok(!!chat, "a boolean key row exists");
+  const sw = chat.querySelector(".cdbx-switch");
+  ok(sw.getAttribute("aria-checked") === "false", "an unset boolean reads as off");
+  ok(chat.textContent.indexOf("not set") >= 0, "and says so, with the upstream default");
+  sw.click();
+  await sleep(60);
+  ok(window.__deployCalls.indexOf("set:chatTabEnabled=true") >= 0, "clicking it writes the key");
+  ok(sw.getAttribute("aria-checked") === "true", "the switch follows");
+  ok(!!chat.querySelector(".cdbx-clear"), "a clear chip appears once the key is set");
+
+  // --- the batch undo, for a handful of toggles set by mistake
+  const clearAll = panel.querySelector(".cdbx-sec-act");
+  ok(!!clearAll, "the configuration section has a clear-all button");
+  ok(!clearAll.classList.contains("cdbx-hide"), "shown, because keys are set");
+  const count = panel.querySelector(".cdbx-sec-h .cdbx-sec-n").textContent;
+  ok(/^\d+ set$/.test(count), "next to how many keys are set: " + count);
+  clearAll.click();
+  await sleep(40);
+  ok(window.__deployCalls.indexOf("clear") < 0,
+     "one click does NOT clear anything - it arms the button");
+  ok(/click again/.test(clearAll.textContent) && clearAll.classList.contains("cdbx-armed"),
+     "which the label and the styling say: " + clearAll.textContent);
+  clearAll.click();
+  await sleep(60);
+  ok(window.__deployCalls.indexOf("clear") >= 0, "the second click clears");
+
+  // --- a secret is never sent to the page
+  const secret = Array.from(panel.querySelectorAll(".cdbx-sections .cdbx-row"))
+    .find(function (r) { return keyOf(r) === "inferenceGatewayApiKey"; });
+  ok(!!secret, "the secret row is rendered");
+  const box = secret.querySelector("input");
+  ok(box.type === "password", "as a password field");
+  ok(box.value === "", "with no value in the DOM");
+  ok(box.placeholder.indexOf("stored") >= 0, "but it says one is stored: " + box.placeholder);
+  ok(panel.textContent.indexOf("sk-secret") < 0, "the secret itself never reaches the page");
+
+  // --- a locked key cannot be written from here
+  const locked = Array.from(panel.querySelectorAll(".cdbx-sections .cdbx-row"))
+    .find(function (r) { return keyOf(r) === "disableDeploymentModeChooser"; });
+  ok(!!locked, "the key that would lock the machine into 3P is shown");
+  ok(locked.querySelector(".cdbx-switch").disabled,
+     "but its switch is disabled, so this page can never write it");
+  ok(locked.textContent.indexOf("read-only") >= 0, "and the row says why");
+
+  // --- the dropdown popup: Chromium paints it from the SELECT's own colors, and
+  //     a popup is not composited over the page, so a translucent background
+  //     leaves it unreadable (white on white in the dark modal).
+  const sel = panel.querySelector(".cdbx-select");
+  ok(!!sel, "a select is rendered");
+  const selBg = getComputedStyle(sel).backgroundColor;
+  ok(alphaOf(selBg) === 1,
+     "the select's background is fully opaque, so its popup is too: " + selBg);
+  const opt = sel.querySelector("option");
+  const optBg = getComputedStyle(opt).backgroundColor;
+  const optFg = getComputedStyle(opt).color;
+  ok(alphaOf(optBg) === 1, "so is every option's: " + optBg);
+  ok(optBg !== optFg, "and the option text is not the same colour as its background");
+  const surface = panel.style.getPropertyValue("--cdbx-surface");
+  ok(surface === "rgb(38,38,36)",
+     "the modal's own opaque surface was measured, not the panel's own translucency: " + surface);
+  ok(panel.style.getPropertyValue("--cdbx-ink") === "rgb(245, 244, 239)",
+     "and the modal's ink with it");
+  ok(panel.style.colorScheme === "dark" || panel.style.colorScheme === "light",
+     "and color-scheme is set, so Chromium paints the popup chrome to match: " +
+     panel.style.colorScheme);
+
+  // --- the file paths are stated, and they open
+  ok(panel.textContent.indexOf("configLibrary") >= 0, "the configuration file path is shown");
+  ok(panel.textContent.indexOf("claude_desktop_config.json") >= 0, "so is the mode file");
+  const rowsP = panel.querySelectorAll(".cdbx-pathrow");
+  ok(rowsP.length === 3, "three file links: the config, the mode file and the managed policy (" +
+     rowsP.length + ")");
+  const link = rowsP[0].querySelector(".cdbx-pathlink");
+  ok(link.tagName === "BUTTON" && link.textContent.indexOf("configLibrary") >= 0,
+     "the path itself is the link");
+  link.click();
+  await sleep(40);
+  ok(window.__revealCalls.indexOf("deploy-config:open") >= 0,
+     "clicking it asks the main process to open that LOCATION, not a path: " +
+     window.__revealCalls.join(","));
+  rowsP[1].querySelector(".cdbx-pathbtn").click();
+  await sleep(40);
+  ok(window.__revealCalls.indexOf("deploy-mode:folder") >= 0,
+     "and the folder button reveals it in the file manager");
+  ok(Array.from(rowsP).map(function (r) {
+       return r.querySelector(".cdbx-pathlink").textContent;
+     }).every(function (t) { return t.indexOf("/") === 0; }),
+     "every link shows an absolute path");
 }
 
 async function themesPanel(themesItem) {
@@ -250,20 +429,22 @@ async function themesPanel(themesItem) {
      "the Cowork glow switch is NOT in the Themes panel");
 
   const secs = sections();
-  ok(labels() === "Your themes:1 | Gaming:3 | Built-in:2 | Community:3 | More:1",
+  ok(labels() === "Your themes:1 | Gaming:3 | Common:5 | More:1",
      "section order and counts: " + labels());
-  ok(secs.length === 5, "five sections for this list (" + secs.length + ")");
+  ok(secs.length === 4, "four sections for this list (" + secs.length + ")");
 
   const gaming = secs[1];
-  ok(gaming.cards.indexOf("Mario") >= 0, "the built-in mario is under Gaming, not lost in Community");
+  ok(gaming.cards.indexOf("Mario") >= 0, "the built-in mario is under Gaming, not lost in Common");
   ok(gaming.cards.indexOf("Zelda") >= 0, "a community gaming palette is under Gaming");
   ok(gaming.cards.indexOf("My-neon") >= 0, "a user gaming theme is under Gaming");
   ok(gaming.cards.join(",") === "Mario,My-neon,Zelda", "Gaming is alphabetical: " + gaming.cards.join(","));
   ok(secs[0].cards.join(",") === "My-own", "Your themes holds the non-gaming custom theme only");
-  ok(secs[2].cards.join(",") === "Catppuccin-mocha,Nord", "Built-in is alphabetical: " + secs[2].cards.join(","));
-  ok(secs[3].cards.join(",") === "Almond,Dracula,Solarized",
-     "Community is alphabetical and keeps the entry that has no category field at all");
-  ok(secs[4].cards.join(",") === "Mystery", "an unknown source tier is still shown, under More");
+  // Built-in and community share one section: the packaging tier is not
+  // something a user picks a theme by.
+  ok(secs[2].cards.join(",") === "Almond,Catppuccin-mocha,Dracula,Nord,Solarized",
+     "Common merges built-in and community, alphabetically, and keeps the entry with no category field: " +
+     secs[2].cards.join(","));
+  ok(secs[3].cards.join(",") === "Mystery", "an unknown source tier is still shown, under More");
   ok(secs.reduce(function (n, s) { return n + s.cards.length; }, 0) === 10,
      "every theme appears exactly once across the sections");
 
@@ -277,15 +458,25 @@ async function themesPanel(themesItem) {
 
   // Filtering searches across sections and takes empty headings with it.
   await type("nord");
-  ok(labels() === "Built-in:1", "filtering to one theme leaves one section: " + labels());
+  ok(labels() === "Common:1", "filtering to one theme leaves one section: " + labels());
   await type("gaming");
   ok(labels() === "Gaming:3", "the filter also matches the category: " + labels());
   await type("zzzz");
   ok(labels() === "", "no section heading survives a filter that matches nothing");
   ok(!!document.querySelector(".cdbx-panel .cdbx-empty"), "the empty message is shown instead");
   await type("");
-  ok(labels() === "Your themes:1 | Gaming:3 | Built-in:2 | Community:3 | More:1",
+  ok(labels() === "Your themes:1 | Gaming:3 | Common:5 | More:1",
      "clearing the filter brings every section back");
+
+  // The config file we write is a link, not just text.
+  const savedRow = document.querySelector(".cdbx-panel .cdbx-pathrow");
+  ok(!!savedRow, "the Themes panel shows the config file it saves to");
+  if (savedRow) {
+    savedRow.querySelector(".cdbx-pathlink").click();
+    await sleep(40);
+    ok(window.__revealCalls.indexOf("config-jsonc:open") >= 0,
+       "and clicking it opens that file: " + window.__revealCalls.join(","));
+  }
 
   // Applying still works from inside a section.
   const zeldaCard = Array.from(document.querySelectorAll(".cdbx-card")).find(function (c) {
@@ -296,7 +487,7 @@ async function themesPanel(themesItem) {
   const nowActive = Array.from(document.querySelectorAll(".cdbx-card.cdbx-on"))
     .map(function (c) { return c.querySelector(".cdbx-cardname").textContent; });
   ok(nowActive.join(",") === "Zelda", "applying from a section moves the highlight: " + nowActive.join(","));
-  ok(labels() === "Your themes:1 | Gaming:3 | Built-in:2 | Community:3 | More:1",
+  ok(labels() === "Your themes:1 | Gaming:3 | Common:5 | More:1",
      "the sections survive a re-render after apply");
 }
 
@@ -416,10 +607,10 @@ async function run() {
   const items = ourItems();
   const box = navbox();
 
-  ok(items.length === 2, "two rows were added (" + items.length + ")");
+  ok(items.length === LABELS.length, LABELS.length + " rows were added (" + items.length + ")");
   ok(!!document.querySelector(".cdbx-navgroup"), "the rainbow Extra label is in the DOM");
   ok(document.querySelector(".cdbx-navgroup").textContent === "Extra", "it says Extra");
-  if (items.length !== 2) return;
+  if (items.length !== LABELS.length) return;
 
   if (real) {
     // --- placement: header and list as SIBLINGS in the scroll container,
@@ -460,18 +651,17 @@ async function run() {
     ok(list.tagName === desktopList.tagName, "our list keeps the upstream list tag (" + list.tagName + ")");
     ok(sameClasses(list, desktopList, ["cdbx-group", "cdbx-navlist"]),
        "our list keeps the upstream list classes (" + list.className + ")");
-    ok(list.children.length === 2, "our list holds exactly our two rows");
+    ok(list.children.length === LABELS.length, "our list holds exactly our own rows");
     ok(items.every(function (it) { return it.parentElement === list; }),
        "both rows are children of our cloned list");
     ok(items.every(function (it) { return it.tagName === "LI"; }),
        "our rows are <li> - valid children of a <ul>");
-    ok(list.textContent.replace(/\s+/g, "") === "ThemesFeatures",
+    ok(list.textContent.replace(/\s+/g, "") === LABELS.join(""),
        "no upstream text survived the clone: " + JSON.stringify(list.textContent.trim()));
 
     // --- the rows are clones of a real row of that same group.
     const sibling = document.getElementById("row-developer").parentElement;
-    assertClonedRow(items[0], "Themes", sibling);
-    assertClonedRow(items[1], "Features", sibling);
+    LABELS.forEach(function (label, i) { assertClonedRow(items[i], label, sibling); });
 
     // --- selection migration, both directions.
     const upstreamSel = document.getElementById("row-general");
@@ -555,6 +745,7 @@ async function run() {
     if (kind === "real") {
       await themesPanel(items[0]);
       await featuresPanel(items[1]);
+      await deployPanel(items[2]);
     }
     return;
   }
@@ -580,8 +771,7 @@ async function run() {
        "and it says which anchor was missing");
 
     const sibling = document.getElementById("row-developer").parentElement;
-    assertClonedRow(items[0], "Themes", sibling);
-    assertClonedRow(items[1], "Features", sibling);
+    LABELS.forEach(function (label, i) { assertClonedRow(items[i], label, sibling); });
 
     // The frame falls back but the selected look does not: aria-current is here.
     const upstreamSel = document.getElementById("row-general");
@@ -613,7 +803,7 @@ async function run() {
      "a link clone is made focusable and activatable by hand");
   ok(items[0].classList.contains("cdbx-item") && items[0].classList.contains("cdbx-item-btn"),
      "cell and control are the same element here");
-  ok(items[0].textContent.trim() === "Themes" && items[1].textContent.trim() === "Features",
+  ok(LABELS.every(function (label, i) { return items[i].textContent.trim() === label; }),
      "the labels are appended as text when the row has no label element");
   ok(diags.some(function (d) { return d.indexOf("icon box") >= 0 && d.indexOf("<svg>") >= 0; }),
      "the missing icon box was reported through the diag channel");
@@ -643,7 +833,7 @@ function html(fixture, name) {
   button { border: 0; background: none; font: inherit; color: inherit; }
   ul { margin: 0; padding: 0; list-style: none; }
   /* dialog shell, mirroring the capture's own layout classes */
-  .dialog { display: flex; width: 900px; height: 600px; }
+  .dialog { display: flex; width: 900px; height: 600px; background: #262624; color: #f5f4ef; }
   .navcol { display: flex; width: 192px; flex: 0 0 auto; flex-direction: column; gap: 8px; border-right: 1px solid #eee; }
   .navbox { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 8px; overflow-y: auto; padding: 0 12px 12px; }
   .pane { display: flex; min-height: 0; min-width: 0; flex: 1 1 auto; flex-direction: column; }
@@ -707,18 +897,100 @@ window.__themes = [
   theme("almond", "community", ""),
   theme("mystery", "weird-tier", "")
 ];
+// The deployment fixture: running 1P, a stored gateway configuration with a
+// secret, and the catalog subset the panel renders from. Mirrors the projection
+// cdb-deploy:read returns, secrets already replaced by the placeholder.
+window.__deployCalls = [];
+window.__revealCalls = [];
+window.__deployState = {
+  ok: true,
+  running: "1p",
+  persisted: "1p",
+  expected: "1p",
+  source: "local",
+  editable: true,
+  locksSignIn: false,
+  keepToken: "__cdb_unchanged__",
+  paths: {
+    userData: "/home/u/.config/Claude",
+    threePDir: "/home/u/.config/Claude-3p",
+    modeFile: "/home/u/.config/Claude-3p/claude_desktop_config.json",
+    libDir: "/home/u/.config/Claude-3p/configLibrary",
+    metaFile: "/home/u/.config/Claude-3p/configLibrary/_meta.json",
+    etcFile: "/etc/claude-desktop/managed-settings.json"
+  },
+  managed: { present: false, usable: false, keys: [], provider: null, locksSignIn: false, error: "" },
+  local: {
+    present: true,
+    appliedId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    entries: [{ id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", name: "Default" }],
+    file: "/home/u/.config/Claude-3p/configLibrary/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.json",
+    values: {
+      inferenceProvider: "gateway",
+      inferenceGatewayBaseUrl: "http://127.0.0.1:4000",
+      inferenceGatewayApiKey: "__cdb_unchanged__",
+      inferenceModels: ["claude-opus-4-8", "claude-sonnet-4-6"]
+    },
+    unknown: [],
+    selects3p: true
+  },
+  groups: [
+    { key: "connection", label: "Inference & connection" },
+    { key: "sandbox", label: "Surfaces, sandbox & tools" }
+  ],
+  keys: [
+    { key: "inferenceProvider", kind: "enum", group: "connection", scope: "3p", label: "Inference provider",
+      options: ["gateway", "vertex", "bedrock", "foundry", "anthropic"] },
+    { key: "inferenceModels", kind: "models", group: "connection", scope: "3p", label: "Model list" },
+    { key: "inferenceGatewayBaseUrl", kind: "text", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway base URL" },
+    { key: "inferenceGatewayApiKey", kind: "secret", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway API key" },
+    { key: "inferenceVertexProjectId", kind: "text", group: "connection", scope: "3p", only: "vertex",
+      label: "GCP project ID" },
+    { key: "chatTabEnabled", kind: "bool", group: "sandbox", scope: "3p", label: "Chat tab", dflt: false },
+    { key: "disableDeploymentModeChooser", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Disable claude.ai sign-in", lock: "it overrides the switch above" }
+  ]
+};
 window.claudeAppBindings = {};
 window.cdbExtra = {
   themesList: stub({ ok: true, entries: window.__themes, active: "mario", configPath: "/tmp/x.jsonc" }),
   themesApply: stub({ ok: true, saved: "/tmp/x.jsonc" }),
   flagsCatalog: stub({ ok: true, count: 0, entries: [] }),
-  flagsRead: stub({ ok: true, storeSeen: true, server: {}, effective: {}, overridesJson: {}, overridesJsonc: {}, builtins: {}, paths: {} }),
+  flagsRead: stub({ ok: true, storeSeen: true, server: {}, effective: {}, overridesJson: {}, overridesJsonc: {}, builtins: {},
+    paths: { json: "/home/u/.config/Claude/claude-desktop-extra.json",
+             jsonc: "/home/u/.config/Claude/claude-desktop-extra.jsonc",
+             userData: "/home/u/.config/Claude" } }),
   flagsSet: stub({ ok: true }),
   flagsUnset: stub({ ok: true }),
   appRelaunch: stub({ ok: true }),
   glowRead: stub({ ok: true, mode: "pulse", opacity: 0.55, defaultOpacity: 0.55, lockedByJsonc: null }),
   glowSet: stub({ ok: true, mode: "calm", windows: 1, path: "/tmp/x.json" }),
   paths: stub({ ok: true, paths: {} }),
+  deployRead: function () { return Promise.resolve(window.__deployState); },
+  deployMode: function (mode) {
+    window.__deployCalls.push("mode:" + mode);
+    return Promise.resolve({ ok: true, mode: mode, expected: mode, path: "/tmp/claude_desktop_config.json" });
+  },
+  deploySet: function (key, value) {
+    window.__deployCalls.push("set:" + key + "=" + JSON.stringify(value));
+    return Promise.resolve({ ok: true, path: "/tmp/cfg.json", value: value });
+  },
+  deployClear: function () {
+    window.__deployCalls.push("clear");
+    return Promise.resolve({ ok: true, cleared: 4, expected: "1p" });
+  },
+  deployApply: function (id) {
+    window.__deployCalls.push("apply:" + id);
+    return Promise.resolve({ ok: true, appliedId: id, expected: "1p" });
+  },
+  deployRaw: stub({ ok: true, text: "{}", file: "/tmp/cfg.json", unknown: [], editable: true }),
+  reveal: function (name, how) {
+    window.__revealCalls.push(name + ":" + how);
+    return Promise.resolve({ ok: true, opened: "/tmp/" + name, mode: how === "folder" ? "folder" : "file" });
+  },
+  deploySaveRaw: stub({ ok: true, path: "/tmp/cfg.json" }),
   diag: function (m) { diags.push(String(m)); return Promise.resolve({ ok: true }); }
 };
 </script>

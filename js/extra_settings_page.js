@@ -408,6 +408,23 @@
     ["circle", { cx: "15.5", cy: "8", r: "2.6" }, SOLID],
     ["circle", { cx: "8.5", cy: "16", r: "2.6" }, SOLID]
   ];
+  // Two stacked backends with a live indicator each: the deployment the app talks
+  // to, personal or your own.
+  var ICON_DEPLOY = [
+    ["rect", { x: "3.2", y: "3.6", width: "17.6", height: "7", rx: "2" }, STROKE],
+    ["rect", { x: "3.2", y: "13.4", width: "17.6", height: "7", rx: "2" }, STROKE],
+    ["circle", { cx: "7.2", cy: "7.1", r: "1.5" }, SOLID],
+    ["circle", { cx: "7.2", cy: "16.9", r: "1.5" }, SOLID]
+  ];
+
+  // The rows of our nav group, in render order. Everything that builds, binds or
+  // dispatches them iterates THIS list, so a new panel is one entry plus one
+  // render function.
+  var NAV_ITEMS = [
+    { kind: "themes", label: "Themes", icon: ICON_THEMES },
+    { kind: "features", label: "Features", icon: ICON_FEATURES },
+    { kind: "deploy", label: "Deployment", icon: ICON_DEPLOY }
+  ];
 
   function applyAttrs(node, map) {
     Object.keys(map).forEach(function (k) { node.setAttribute(k, map[k]); });
@@ -502,6 +519,15 @@
       control.setAttribute("tabindex", "0");
     }
     return { cell: cell, control: control };
+  }
+
+  // One clone per NAV_ITEMS entry, each carrying the kind that picks its panel.
+  function makeItems(template) {
+    return NAV_ITEMS.map(function (spec) {
+      var item = makeItem(template, spec.label, spec.icon);
+      item.kind = spec.kind;
+      return item;
+    });
   }
 
   // The label element, found SEMANTICALLY: the element inside the row that is
@@ -619,8 +645,7 @@
     stripState(ourList);
     ourList.classList.add("cdbx-group", "cdbx-navlist");
 
-    var items = [makeItem(template, "Themes", ICON_THEMES),
-                 makeItem(template, "Features", ICON_FEATURES)];
+    var items = makeItems(template);
     for (var i = 0; i < items.length; i++) ourList.appendChild(items[i].cell);
 
     return {
@@ -645,8 +670,7 @@
   // inside a non-list. A <div> in a <ul> is what the previous fallback produced,
   // and it is what made the injection misrender.
   function fabricateGroup(container, list, template) {
-    var items = [makeItem(template, "Themes", ICON_THEMES),
-                 makeItem(template, "Features", ICON_FEATURES)];
+    var items = makeItems(template);
     var host = list && template.tagName === "LI" ? list : container;
     var header = document.createElement(isList(host) ? "li" : "div");
     header.className = "cdbx-group cdbx-navgroup-fb";
@@ -744,6 +768,98 @@
     return !result || result.ok !== true;
   }
 
+  // --- the modal's own surface color ---------------------------------------
+  //
+  // Everything else in this panel inherits (text from the modal, surfaces mixed
+  // out of currentColor), but a <select> cannot: Chromium paints its DROPDOWN
+  // POPUP with the select's own background-color and color, and a popup is not
+  // composited over the page. With the translucent background the rest of the
+  // panel uses, the popup came out white with our inherited white text on it.
+  //
+  // So resolve the real surface once per mount and hand it to the stylesheet:
+  // the first ancestor with an opaque background is the modal's own layer, and
+  // the panel's computed color is the ink. color-scheme then tells Chromium how
+  // to paint the popup's own chrome (and the scrollbars, and the number-input
+  // spinners) instead of assuming a white page.
+
+  function rgbParts(color) {
+    var m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/i.exec(color || "");
+    if (!m) return null;
+    return {
+      r: parseFloat(m[1]), g: parseFloat(m[2]), b: parseFloat(m[3]),
+      a: m[4] === undefined ? 1 : parseFloat(m[4])
+    };
+  }
+
+  // Rec. 601 is plenty for a light/dark decision and needs no gamma work.
+  function isDark(color) {
+    var p = rgbParts(color);
+    if (!p) return true;
+    return (p.r * 0.299 + p.g * 0.587 + p.b * 0.114) < 128;
+  }
+
+  function paintSurface(panel) {
+    var node = panel;
+    var surface = "";
+    var depth = 0;
+    while (node && depth++ < 14) {
+      var bg = "";
+      try { bg = getComputedStyle(node).backgroundColor; } catch (e) {}
+      var p = rgbParts(bg);
+      // A nearly-transparent layer is not the surface the popup would sit on.
+      if (p && p.a >= 0.95) { surface = "rgb(" + p.r + "," + p.g + "," + p.b + ")"; break; }
+      node = node.parentElement;
+    }
+    var ink = "";
+    try { ink = getComputedStyle(panel).color; } catch (e2) {}
+    if (surface) panel.style.setProperty("--cdbx-surface", surface);
+    if (ink) panel.style.setProperty("--cdbx-ink", ink);
+    // With no opaque ancestor to measure, the ink still says which side we are on.
+    panel.style.colorScheme = isDark(surface || (ink && !isDark(ink) ? "rgb(0,0,0)" : "rgb(255,255,255)"))
+      ? "dark" : "light";
+  }
+
+  // --- file links ----------------------------------------------------------
+  // Every panel ends in the files it wrote, and those are clickable: the path
+  // opens in the desktop's default handler, the folder button shows it in the
+  // file manager. The page passes a LOCATION NAME, never a path - the main side
+  // owns the mapping, so nothing here can ask the desktop to open something else.
+
+  function pathRow(label, path, name) {
+    var row = el("div", "cdbx-pathrow");
+    if (label) row.appendChild(el("span", "cdbx-pathlbl", label));
+    var link = el("button", "cdbx-pathlink", path);
+    link.type = "button";
+    link.title = "Open " + path;
+    var folder = el("button", "cdbx-pathbtn", "folder");
+    folder.type = "button";
+    folder.title = "Show " + path + " in the file manager";
+
+    function go(how, button) {
+      if (!api || typeof api.reveal !== "function") {
+        toast("This build's preload cannot open files - copy the path instead.", true);
+        return;
+      }
+      button.disabled = true;
+      api.reveal(name, how).then(function (res) {
+        button.disabled = false;
+        if (failed(res)) { toast("Could not open " + path + ": " + reason(res), true); return; }
+        if (res.mode === "folder" && how !== "folder") {
+          toast("That file does not exist yet - opened " + res.opened + " instead");
+        }
+      }, function (err) {
+        button.disabled = false;
+        toast("Could not open " + path + ": " + (err && err.message ? err.message : String(err)), true);
+      });
+    }
+
+    link.addEventListener("click", function () { go("open", link); });
+    folder.addEventListener("click", function () { go("folder", folder); });
+    row.appendChild(link);
+    row.appendChild(folder);
+    return row;
+  }
+
   function reason(result) {
     if (!result) return "no response from the main process";
     return result.error || "unknown error";
@@ -751,15 +867,15 @@
 
   // --- themes panel --------------------------------------------------------
 
-  // Sections in render order, mirroring the standalone Ctrl+Shift+T picker. A
-  // section with no themes is omitted entirely. "gaming" is keyed on the entry's
-  // category rather than its source, and "other" exists so a source tier we do
-  // not know yet is still shown instead of silently dropped.
+  // Sections in render order. A section with no themes is omitted entirely.
+  // "gaming" is keyed on the entry's category rather than its source, the
+  // built-in and community palettes share one "Common" section (the distinction
+  // is a packaging detail, not something to pick a theme by), and "other" exists
+  // so a source tier we do not know yet is still shown instead of dropped.
   var THEME_SECTIONS = [
     { key: "custom", label: "Your themes" },
     { key: "gaming", label: "Gaming" },
-    { key: "builtin", label: "Built-in" },
-    { key: "community", label: "Community" },
+    { key: "common", label: "Common" },
     { key: "other", label: "More" }
   ];
 
@@ -769,7 +885,8 @@
   function themeBucket(entry) {
     if ((entry.category || "") === "gaming") return "gaming";
     var source = entry.source || "";
-    if (source === "custom" || source === "builtin" || source === "community") return source;
+    if (source === "custom") return "custom";
+    if (source === "builtin" || source === "community") return "common";
     return "other";
   }
 
@@ -889,7 +1006,7 @@
       panel.appendChild(host);
 
       if (result.configPath) {
-        panel.appendChild(el("div", "cdbx-path", "Saved to " + result.configPath));
+        panel.appendChild(pathRow("Saved to", result.configPath, "config-jsonc"));
       }
 
       var active = result.active || null;
@@ -1046,10 +1163,11 @@
       panel.appendChild(list);
 
       var paths = state.paths || {};
-      var pathLine = el("div", "cdbx-path");
-      pathLine.textContent = "Overrides are written to " + (paths.json || "claude-desktop-extra.json") +
-        (paths.jsonc ? "  |  hand-edited entries in " + paths.jsonc + " win over this page" : "");
-      panel.appendChild(pathLine);
+      panel.appendChild(pathRow("Overrides are written to",
+        paths.json || "claude-desktop-extra.json", "config-json"));
+      if (paths.jsonc) {
+        panel.appendChild(pathRow("Hand-edited entries win, in", paths.jsonc, "config-jsonc"));
+      }
       if (!state.storeSeen) {
         panel.appendChild(el("div", "cdbx-path",
           "The feature store has not loaded yet in this session, so the switches below show your saved overrides only."));
@@ -1215,6 +1333,631 @@
     });
   }
 
+  // --- deployment panel ----------------------------------------------------
+  //
+  // 1P/3P is decided in the bootstrap before any window exists, so nothing here
+  // takes effect before a full restart - the panel says so, and offers the
+  // restart. Every write goes to files inside THIS profile's own config dir:
+  // <userData>-3p/claude_desktop_config.json for the mode, and the applied entry
+  // of <userData>-3p/configLibrary for the configuration. The main half explains
+  // the precedence; what matters here is that a machine that got stuck in 3P can
+  // be switched back with one click, and that the values the app boots from are
+  // editable without root.
+
+  var MODE_NAME = { "1p": "Personal - claude.ai account", "3p": "Third-party inference" };
+  var MODE_SHORT = { "1p": "1P", "3p": "3P" };
+
+  function modeName(mode) {
+    return MODE_NAME[mode] || "unknown";
+  }
+
+  // A stored secret is never sent to this page: the row shows that one exists and
+  // typing a new value replaces it.
+  function isSet(value) {
+    return value !== undefined && value !== null && !(Array.isArray(value) && !value.length);
+  }
+
+  function showValue(entry, value) {
+    if (!isSet(value)) return "";
+    if (entry.kind === "lines" || entry.kind === "models") {
+      return (Array.isArray(value) ? value : [value]).join("\n");
+    }
+    if (entry.kind === "json") {
+      try { return JSON.stringify(value, null, 2); } catch (e) { return String(value); }
+    }
+    return String(value);
+  }
+
+  function renderDeploy(panel) {
+    clear(panel);
+    panel.appendChild(el("div", "cdbx-h1", "Deployment"));
+    panel.appendChild(el("div", "cdbx-sub",
+      "Personal claude.ai (1P) or your own inference backend (3P) - Bedrock, Vertex AI, Azure AI Foundry " +
+      "or any Anthropic-compatible gateway. Both the switch and the values below are written to this " +
+      "profile's own config directory, so no root and no enterprise policy file is needed."));
+
+    if (!api || typeof api.deployRead !== "function") {
+      panel.appendChild(el("div", "cdbx-error",
+        "This build's preload does not expose the deployment bridge - reinstall to pick it up."));
+      return;
+    }
+
+    var status = el("div", "cdbx-empty", "Reading the deployment configuration...");
+    panel.appendChild(status);
+
+    api.deployRead().then(function (state) {
+      if (failed(state)) {
+        status.className = "cdbx-error";
+        status.textContent = "The deployment configuration is unavailable: " + reason(state);
+        return;
+      }
+      status.remove();
+      drawDeploy(panel, state);
+    }, function (err) {
+      status.className = "cdbx-error";
+      status.textContent = "The deployment configuration is unavailable: " +
+        (err && err.message ? err.message : String(err));
+    });
+  }
+
+  function drawDeploy(panel, state) {
+    var values = (state.local && state.local.values) || {};
+    var expected = state.expected;
+
+    // --- mode card ---------------------------------------------------------
+    var card = el("div", "cdbx-mode");
+    var live = el("div", "cdbx-mode-live");
+    live.appendChild(el("div", "cdbx-mode-now", "Running now: " + modeName(state.running)));
+    live.appendChild(el("div", "cdbx-mode-path", state.paths.userData));
+    card.appendChild(live);
+
+    // Undoing the mode choice itself: the same "clear" the Features panel offers
+    // for a flag override, and the same value upstream's own setDeploymentMode
+    // takes. Without it, one click on 1P or 3P is permanent - the key stays in
+    // the file forever and keeps overriding the stored configuration.
+    var modeClear = el("button", "cdbx-clear", "clear");
+    modeClear.type = "button";
+    modeClear.title = "Forget the saved choice and let the stored configuration decide again";
+    card.appendChild(modeClear);
+
+    var seg = el("div", "cdbx-seg");
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", "deployment mode");
+    var segButtons = {};
+    ["1p", "3p"].forEach(function (mode) {
+      var b = el("button", "cdbx-seg-b", MODE_SHORT[mode]);
+      b.type = "button";
+      b.title = modeName(mode);
+      b.setAttribute("aria-pressed", expected === mode ? "true" : "false");
+      seg.appendChild(b);
+      segButtons[mode] = b;
+    });
+    card.appendChild(seg);
+    panel.appendChild(card);
+
+    var nextLine = el("div", "cdbx-state");
+    panel.appendChild(nextLine);
+
+    // The restart bar: shown only while the persisted choice and the running
+    // session disagree, which is the only moment it means anything.
+    var notice = el("div", "cdbx-notice cdbx-info cdbx-hide");
+    notice.appendChild(el("div", "cdbx-notice-title", "Restart Claude Desktop to switch"));
+    notice.appendChild(el("div", "cdbx-notice-body",
+      "The mode is chosen at startup, before any window exists. Quitting and reopening from your " +
+      "desktop launcher is the cleanest way: \"Restart now\" relaunches the app directly and so skips " +
+      "the launcher's systemd scope and environment."));
+    var restart = el("button", "cdbx-btn", "Restart now");
+    restart.type = "button";
+    restart.addEventListener("click", function () {
+      restart.disabled = true;
+      restart.textContent = "Restarting...";
+      api.appRelaunch().then(function (res) {
+        if (failed(res)) {
+          restart.disabled = false;
+          restart.textContent = "Restart now";
+          toast("Could not restart: " + reason(res), true);
+        }
+      }, function (err) {
+        restart.disabled = false;
+        restart.textContent = "Restart now";
+        toast("Could not restart: " + (err && err.message ? err.message : String(err)), true);
+      });
+    });
+    notice.appendChild(restart);
+    panel.appendChild(notice);
+
+    function syncMode() {
+      Object.keys(segButtons).forEach(function (mode) {
+        segButtons[mode].setAttribute("aria-pressed", expected === mode ? "true" : "false");
+      });
+      var from = state.source === "managed" ? "the managed policy file"
+        : state.source === "local" ? "the stored configuration"
+        : "no stored configuration";
+      nextLine.textContent = "Next start: " + modeName(expected) + " - decided from " + from +
+        (state.persisted ? " and the saved deploymentMode \"" + state.persisted + "\"" : "");
+      if (expected === state.running) notice.classList.add("cdbx-hide");
+      else notice.classList.remove("cdbx-hide");
+      // Nothing saved, nothing to clear - and with an enterprise policy forcing
+      // 3P the key would not be read anyway.
+      if (state.persisted && !state.locksSignIn) modeClear.classList.remove("cdbx-hide");
+      else modeClear.classList.add("cdbx-hide");
+    }
+    syncMode();
+
+    modeClear.addEventListener("click", function () {
+      modeClear.disabled = true;
+      api.deployMode("clear").then(function (res) {
+        modeClear.disabled = false;
+        if (failed(res)) { toast("Could not clear the saved mode: " + reason(res), true); return; }
+        state.persisted = null;
+        expected = res.expected || expected;
+        syncMode();
+        toast("The saved mode choice is gone - the stored configuration decides again");
+      }, function (err) {
+        modeClear.disabled = false;
+        toast("Could not clear the saved mode: " +
+          (err && err.message ? err.message : String(err)), true);
+      });
+    });
+
+    Object.keys(segButtons).forEach(function (mode) {
+      segButtons[mode].addEventListener("click", function () {
+        if (expected === mode) return;
+        segButtons[mode].disabled = true;
+        api.deployMode(mode).then(function (res) {
+          segButtons[mode].disabled = false;
+          if (failed(res)) { toast(reason(res), true); return; }
+          expected = res.expected || mode;
+          state.persisted = mode;
+          syncMode();
+          toast(expected === state.running
+            ? "Back to " + modeName(expected) + " - no restart needed"
+            : modeName(expected) + " selected - restart to switch");
+        }, function (err) {
+          segButtons[mode].disabled = false;
+          toast("Could not switch mode: " + (err && err.message ? err.message : String(err)), true);
+        });
+      });
+    });
+
+    // --- where the configuration comes from --------------------------------
+    var managed = state.managed || {};
+    if (managed.present && managed.usable) {
+      var box = el("div", "cdbx-notice cdbx-info");
+      box.appendChild(el("div", "cdbx-notice-title", "A managed policy file is active"));
+      box.appendChild(el("div", "cdbx-notice-body",
+        state.paths.etcFile + " is valid and replaces the local configuration entirely" +
+        (managed.provider ? " (provider: " + managed.provider + ")" : "") + ". " +
+        (managed.locksSignIn
+          ? "It also disables claude.ai sign-in, so this machine cannot be switched to 1P."
+          : "You can still switch to 1P above; the values below are read-only while it is in place.")));
+      panel.appendChild(box);
+    } else if (managed.present) {
+      var warn = el("div", "cdbx-notice");
+      warn.appendChild(el("div", "cdbx-notice-title", "The managed policy file is being ignored"));
+      warn.appendChild(el("div", "cdbx-notice-body",
+        state.paths.etcFile + " " + (managed.error || "could not be read") +
+        ". The local configuration below is used instead."));
+      panel.appendChild(warn);
+    }
+
+    // The stored configurations upstream's own 3P Setup keeps. Applying none is
+    // the non-destructive way out of 3P: every entry file stays on disk.
+    var entries = (state.local && state.local.entries) || [];
+    if (entries.length) {
+      var pick = el("div", "cdbx-row");
+      var pickMain = el("div", "cdbx-row-main");
+      pickMain.appendChild(el("div", "cdbx-label", "Active configuration"));
+      pickMain.appendChild(el("div", "cdbx-note",
+        "The stored third-party configurations of this profile. \"None\" leaves them on disk and boots 1P."));
+      pick.appendChild(pickMain);
+      var pickAside = el("div", "cdbx-row-aside");
+      var select = el("select", "cdbx-select");
+      var none = el("option", "", "None");
+      none.value = "";
+      select.appendChild(none);
+      entries.forEach(function (e) {
+        var opt = el("option", "", (e.name || "unnamed") + " (" + e.id.slice(0, 8) + ")");
+        opt.value = e.id;
+        select.appendChild(opt);
+      });
+      select.value = state.local.appliedId || "";
+      select.addEventListener("change", function () {
+        select.disabled = true;
+        api.deployApply(select.value).then(function (res) {
+          select.disabled = false;
+          if (failed(res)) {
+            select.value = state.local.appliedId || "";
+            toast("Could not change the active configuration: " + reason(res), true);
+            return;
+          }
+          toast("Active configuration changed - reloading the panel");
+          renderDeploy(panel);
+        }, function (err) {
+          select.disabled = false;
+          toast("Could not change the active configuration: " +
+            (err && err.message ? err.message : String(err)), true);
+        });
+      });
+      pickAside.appendChild(select);
+      pick.appendChild(pickAside);
+      var pickHost = el("div", "cdbx-list");
+      pickHost.appendChild(pick);
+      panel.appendChild(pickHost);
+    }
+
+    // --- the key editor ----------------------------------------------------
+    var head = el("div", "cdbx-sec-h");
+    head.appendChild(el("span", "cdbx-sec-t", "Third-party configuration"));
+    var setCount = el("span", "cdbx-sec-n", "0");
+    head.appendChild(setCount);
+
+    // The batch undo. Per-key chips only exist on keys that ARE set, so without
+    // this there is no way back from a handful of accidental toggles other than
+    // finding each one again. Two clicks, because it does throw away real work.
+    var clearAll = el("button", "cdbx-clear cdbx-sec-act", "clear all");
+    clearAll.type = "button";
+    clearAll.title = "Remove every key from this configuration - the file and its name stay";
+    var armed = null;
+    function disarm() {
+      if (armed) { clearTimeout(armed); armed = null; }
+      clearAll.textContent = "clear all";
+      clearAll.classList.remove("cdbx-armed");
+    }
+    function syncSetCount() {
+      var n = Object.keys(values).length;
+      setCount.textContent = String(n) + " set";
+      if (n && state.editable) clearAll.classList.remove("cdbx-hide");
+      else { clearAll.classList.add("cdbx-hide"); disarm(); }
+    }
+    clearAll.addEventListener("click", function () {
+      if (!armed) {
+        clearAll.textContent = "click again to clear " + Object.keys(values).length + " keys";
+        clearAll.classList.add("cdbx-armed");
+        armed = setTimeout(disarm, 5000);
+        return;
+      }
+      disarm();
+      clearAll.disabled = true;
+      api.deployClear().then(function (res) {
+        clearAll.disabled = false;
+        if (failed(res)) { toast("Nothing was cleared: " + reason(res), true); return; }
+        toast(res.cleared
+          ? "Cleared " + res.cleared + " key(s) - the configuration is empty again"
+          : "There was nothing to clear");
+        renderDeploy(panel);
+      }, function (err) {
+        clearAll.disabled = false;
+        toast("Nothing was cleared: " + (err && err.message ? err.message : String(err)), true);
+      });
+    });
+    head.appendChild(clearAll);
+    panel.appendChild(head);
+    panel.appendChild(el("div", "cdbx-sub",
+      "The keys of the managed-settings schema this build accepts (Claude Desktop " +
+      "v1.24012.9). A key you leave untouched is simply absent from the file, and Claude Desktop " +
+      "then uses its own default. Values are saved as you change them; the app reads them at startup."));
+
+    var tools = el("div", "cdbx-tools");
+    var search = el("input", "cdbx-search cdbx-search-inline");
+    search.type = "search";
+    search.placeholder = "Filter keys";
+    tools.appendChild(search);
+    var allBox = el("label", "cdbx-check");
+    var allInput = el("input");
+    allInput.type = "checkbox";
+    allBox.appendChild(allInput);
+    allBox.appendChild(el("span", "", "Show keys for every provider"));
+    tools.appendChild(allBox);
+    panel.appendChild(tools);
+
+    var host = el("div", "cdbx-sections");
+    panel.appendChild(host);
+
+    var readOnly = !state.editable;
+
+    function currentProvider() {
+      return values.inferenceProvider || (managed.usable ? managed.provider : null);
+    }
+
+    function rowNote(entry, value) {
+      if (entry.lock) return "read-only: " + entry.lock;
+      if (readOnly) return "read-only while the managed policy file is active";
+      if (isSet(value)) {
+        if (entry.kind === "secret") return "stored - type a new value to replace it";
+        return "set in this configuration";
+      }
+      var bits = ["not set"];
+      if (entry.dflt !== undefined) bits.push("Claude Desktop default: " + JSON.stringify(entry.dflt));
+      return bits.join(" - ");
+    }
+
+    // One row per key. Every control commits through the same save(), so the
+    // state line, the clear chip and the restart bar stay in sync however the
+    // value was edited.
+    function keyRow(entry) {
+      var value = values[entry.key];
+      var node = el("div", "cdbx-row");
+      var main = el("div", "cdbx-row-main");
+      var head2 = el("div", "cdbx-label");
+      head2.appendChild(el("span", "", entry.label));
+      if (entry.scope === "3p") head2.appendChild(el("span", "cdbx-tag", "3P"));
+      else if (entry.scope === "1p") head2.appendChild(el("span", "cdbx-tag", "1P"));
+      else head2.appendChild(el("span", "cdbx-tag", "1P + 3P"));
+      main.appendChild(head2);
+      main.appendChild(el("div", "cdbx-id", entry.key));
+      if (entry.note) main.appendChild(el("div", "cdbx-note", entry.note));
+      var stateLine = el("div", "cdbx-state", rowNote(entry, value));
+      main.appendChild(stateLine);
+      node.appendChild(main);
+
+      var aside = el("div", "cdbx-row-aside");
+      node.appendChild(aside);
+
+      var clearBtn = null;
+      var control = null;
+
+      function flash() {
+        node.classList.add("cdbx-flash");
+        setTimeout(function () { node.classList.remove("cdbx-flash"); }, 700);
+      }
+
+      function syncClear() {
+        var has = isSet(values[entry.key]);
+        if (has && !clearBtn && !readOnly && !entry.lock) {
+          clearBtn = el("button", "cdbx-clear", "clear");
+          clearBtn.type = "button";
+          clearBtn.title = "Remove this key from the configuration file";
+          clearBtn.addEventListener("click", function () { save(null); });
+          aside.insertBefore(clearBtn, aside.firstChild);
+        } else if ((!has || readOnly) && clearBtn) {
+          clearBtn.remove();
+          clearBtn = null;
+        }
+      }
+
+      function save(next) {
+        if (readOnly || entry.lock) return;
+        api.deploySet(entry.key, next).then(function (res) {
+          if (failed(res)) {
+            toast("Could not save " + entry.key + ": " + reason(res), true);
+            paint();
+            return;
+          }
+          if (res.unchanged) return;
+          if (res.value === null || res.value === undefined) delete values[entry.key];
+          else values[entry.key] = res.value;
+          if (res.expected) { expected = res.expected; state.persisted = res.persisted; syncMode(); }
+          if (res.source) state.source = res.source;
+          paint();
+          syncClear();
+          syncSetCount();
+          flash();
+          // Only the provider changes which rows belong on screen; redrawing on
+          // every other save would tear down the row being edited.
+          if (entry.key === "inferenceProvider") draw(search.value);
+          toast(entry.key + (isSet(values[entry.key]) ? " saved" : " removed") + " - restart to apply");
+        }, function (err) {
+          toast("Could not save " + entry.key + ": " +
+            (err && err.message ? err.message : String(err)), true);
+        });
+      }
+
+      // Repaint a control from `values` after a rejected write.
+      function paint() {
+        var v = values[entry.key];
+        stateLine.textContent = rowNote(entry, v);
+        if (!control) return;
+        if (entry.kind === "bool") control.setAttribute("aria-checked", v === true ? "true" : "false");
+        else if (entry.kind === "secret") {
+          // The field itself never holds the credential; only the placeholder
+          // says whether one is stored, so it has to follow.
+          control.value = "";
+          control.placeholder = isSet(v) ? "stored - type to replace" : "not set";
+        } else control.value = showValue(entry, v);
+      }
+
+      if (entry.kind === "bool") {
+        control = el("button", "cdbx-switch");
+        control.type = "button";
+        control.setAttribute("role", "switch");
+        control.setAttribute("aria-checked", value === true ? "true" : "false");
+        control.setAttribute("aria-label", entry.key);
+        control.disabled = readOnly || !!entry.lock;
+        control.addEventListener("click", function () {
+          if (control.disabled) return;
+          save(control.getAttribute("aria-checked") !== "true");
+        });
+        aside.appendChild(control);
+      } else if (entry.kind === "enum") {
+        control = el("select", "cdbx-select");
+        var empty = el("option", "", "not set");
+        empty.value = "";
+        control.appendChild(empty);
+        entry.options.forEach(function (o) {
+          var opt = el("option", "", o);
+          opt.value = o;
+          control.appendChild(opt);
+        });
+        control.value = isSet(value) ? String(value) : "";
+        control.disabled = readOnly || !!entry.lock;
+        control.addEventListener("change", function () { save(control.value || null); });
+        aside.appendChild(control);
+      } else if (entry.kind === "lines" || entry.kind === "models" || entry.kind === "json") {
+        control = el("textarea", "cdbx-area");
+        control.rows = entry.kind === "json" ? 4 : 3;
+        control.spellcheck = false;
+        control.value = showValue(entry, value);
+        control.placeholder = entry.kind === "json" ? "{ }" : "one entry per line";
+        control.disabled = readOnly || !!entry.lock;
+        var saveBtn = el("button", "cdbx-clear", "save");
+        saveBtn.type = "button";
+        saveBtn.disabled = true;
+        control.addEventListener("input", function () {
+          saveBtn.disabled = control.value === showValue(entry, values[entry.key]);
+        });
+        saveBtn.addEventListener("click", function () {
+          saveBtn.disabled = true;
+          save(control.value.trim() ? control.value : null);
+        });
+        var wrap = el("div", "cdbx-areawrap");
+        wrap.appendChild(control);
+        if (!readOnly && !entry.lock) wrap.appendChild(saveBtn);
+        node.appendChild(wrap);
+        node.classList.add("cdbx-row-wide");
+      } else {
+        control = el("input", "cdbx-input");
+        control.type = entry.kind === "secret" ? "password" : (entry.kind === "int" ? "number" : "text");
+        if (entry.kind === "secret") {
+          control.value = "";
+          control.placeholder = isSet(value) ? "stored - type to replace" : "not set";
+          control.autocomplete = "off";
+        } else {
+          control.value = showValue(entry, value);
+          control.placeholder = entry.dflt !== undefined ? String(entry.dflt) : "not set";
+        }
+        control.disabled = readOnly || !!entry.lock;
+        var commit = function () {
+          var raw = control.value.trim();
+          if (entry.kind === "secret") {
+            if (!raw) return;                       // empty means "keep it"
+            save(raw);
+            control.value = "";
+            return;
+          }
+          if (raw === showValue(entry, values[entry.key])) return;
+          save(raw || null);
+        };
+        control.addEventListener("blur", commit);
+        control.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+        });
+        aside.appendChild(control);
+      }
+
+      syncClear();
+      return node;
+    }
+
+    // Provider-specific keys stay out of the way until they apply, which is what
+    // keeps a gateway setup from scrolling past thirty Bedrock and Vertex fields.
+    function visible(entry, needle) {
+      if (needle) {
+        return entry.key.toLowerCase().indexOf(needle) >= 0 ||
+          entry.label.toLowerCase().indexOf(needle) >= 0 ||
+          (entry.note || "").toLowerCase().indexOf(needle) >= 0;
+      }
+      if (!entry.only) return true;
+      if (allInput.checked) return true;
+      if (isSet(values[entry.key])) return true;
+      return entry.only === currentProvider();
+    }
+
+    function draw(filter) {
+      clear(host);
+      var needle = (filter || "").trim().toLowerCase();
+      var shown = 0;
+      state.groups.forEach(function (group) {
+        var rows = state.keys.filter(function (entry) {
+          return entry.group === group.key && visible(entry, needle);
+        });
+        if (!rows.length) return;
+        var h = el("div", "cdbx-sec-h");
+        h.appendChild(el("span", "cdbx-sec-t", group.label));
+        h.appendChild(el("span", "cdbx-sec-n", String(rows.length)));
+        host.appendChild(h);
+        var list = el("div", "cdbx-list");
+        rows.forEach(function (entry) { list.appendChild(keyRow(entry)); });
+        host.appendChild(list);
+        shown += rows.length;
+      });
+      if (!shown) host.appendChild(el("div", "cdbx-empty", "No configuration key matches that filter."));
+    }
+
+    search.addEventListener("input", function () { draw(search.value); });
+    allInput.addEventListener("change", function () { draw(search.value); });
+    draw("");
+    syncSetCount();
+
+    // --- raw file + paths --------------------------------------------------
+    var rawHead = el("div", "cdbx-sec-h");
+    rawHead.appendChild(el("span", "cdbx-sec-t", "The file itself"));
+    panel.appendChild(rawHead);
+
+    var rawToggle = el("button", "cdbx-btn", "Show the configuration file");
+    rawToggle.type = "button";
+    panel.appendChild(rawToggle);
+    var rawBox = el("div", "cdbx-rawbox cdbx-hide");
+    panel.appendChild(rawBox);
+
+    var rawOpen = false;
+    rawToggle.addEventListener("click", function () {
+      rawOpen = !rawOpen;
+      rawToggle.textContent = rawOpen ? "Hide the configuration file" : "Show the configuration file";
+      if (!rawOpen) { rawBox.classList.add("cdbx-hide"); return; }
+      rawBox.classList.remove("cdbx-hide");
+      clear(rawBox);
+      var loading = el("div", "cdbx-empty", "Reading...");
+      rawBox.appendChild(loading);
+      api.deployRaw().then(function (res) {
+        clear(rawBox);
+        if (failed(res)) {
+          rawBox.appendChild(el("div", "cdbx-error", "Could not read the file: " + reason(res)));
+          return;
+        }
+        var area = el("textarea", "cdbx-area cdbx-area-tall");
+        area.rows = 14;
+        area.spellcheck = false;
+        area.value = res.text;
+        area.disabled = !res.editable;
+        rawBox.appendChild(area);
+        rawBox.appendChild(el("div", "cdbx-note",
+          "Exactly what Claude Desktop reads, except that stored secrets show as \"" +
+          state.keepToken + "\" and are written back unchanged. An unknown key is rejected rather than " +
+          "silently dropped: the same key would make a managed policy file be ignored whole."));
+        if (res.editable) {
+          var saveRaw = el("button", "cdbx-btn", "Save the file");
+          saveRaw.type = "button";
+          saveRaw.addEventListener("click", function () {
+            saveRaw.disabled = true;
+            api.deploySaveRaw(area.value).then(function (r) {
+              saveRaw.disabled = false;
+              if (failed(r)) { toast("Not saved: " + reason(r), true); return; }
+              toast("Configuration file saved - reloading the panel");
+              renderDeploy(panel);
+            }, function (err) {
+              saveRaw.disabled = false;
+              toast("Not saved: " + (err && err.message ? err.message : String(err)), true);
+            });
+          });
+          rawBox.appendChild(saveRaw);
+        }
+      }, function (err) {
+        clear(rawBox);
+        rawBox.appendChild(el("div", "cdbx-error",
+          "Could not read the file: " + (err && err.message ? err.message : String(err))));
+      });
+    });
+
+    panel.appendChild(pathRow("Configuration",
+      state.local.file || state.paths.libDir, "deploy-config"));
+    panel.appendChild(pathRow("Deployment mode", state.paths.modeFile, "deploy-mode"));
+    panel.appendChild(pathRow("Managed policy" + (managed.present ? "" : " (absent)"),
+      state.paths.etcFile, "managed"));
+
+    if (state.local && state.local.unknown && state.local.unknown.length) {
+      panel.appendChild(el("div", "cdbx-path",
+        "Keys in the file this build does not know and therefore ignores: " +
+        state.local.unknown.join(", ")));
+    }
+  }
+
+  var PANELS = {
+    themes: renderThemes,
+    features: renderFeatures,
+    deploy: renderDeploy
+  };
+
   // --- mounting ------------------------------------------------------------
 
   // {dialog, container, rowTag, rows, header, list, items, panel, pane,
@@ -1302,10 +2045,12 @@
       pane.style.display = "none";
       mounted.panel = el("div", "cdbx-panel");
       pane.parentElement.insertBefore(mounted.panel, pane.nextSibling);
+      // Only possible once the panel is IN the document: it measures the modal.
+      paintSurface(mounted.panel);
     }
     selectOurs(item.control);
-    if (kind === "themes") renderThemes(mounted.panel);
-    else renderFeatures(mounted.panel);
+    var render = PANELS[kind] || renderThemes;
+    render(mounted.panel);
     mounted.panel.scrollTop = 0;
   }
 
@@ -1376,8 +2121,7 @@
       selection: null
     };
 
-    bindItem(items[0], "themes");
-    bindItem(items[1], "features");
+    for (var b = 0; b < items.length; b++) bindItem(items[b], items[b].kind);
 
     // Any click on an upstream nav row hands the pane and the selected look back.
     // Capture phase, so upstream's own handler still runs and renders into the

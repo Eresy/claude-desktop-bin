@@ -211,6 +211,36 @@ echo ""
 # These suites run the REAL injected engine (electron shimmed) and the real picker page /
 # injector / stylesheet in headless Chromium. Each one exits 3 to say "a tool I need is
 # not installed" - that is a SKIP, not a FAIL.
+# The Deployment panel writes the files the app's 1P/3P bootstrap reads. A green
+# patch run proves nothing about WHICH file got written, so this suite runs the
+# real handlers (electron shimmed) against a temporary profile.
+echo "-----------------------------------"
+echo "Deployment mode suite (node)"
+if command -v node >/dev/null 2>&1; then
+    TOTAL=$((TOTAL + 1))
+    deploy_out=$(node "$SCRIPT_DIR/test-deployment-main.mjs" 2>&1) && deploy_rc=0 || deploy_rc=$?
+    echo "$deploy_out" | sed 's/^/  /'
+    case $deploy_rc in
+        0)
+            echo "  Status: PASS"
+            PASSED=$((PASSED + 1))
+            ;;
+        3)
+            echo "  Status: SKIP (the suite reported a missing tool)"
+            SKIPPED=$((SKIPPED + 1))
+            ;;
+        *)
+            echo "  Status: FAIL"
+            FAILED=$((FAILED + 1))
+            ;;
+    esac
+else
+    echo "  Status: SKIP (no node on this machine)"
+    TOTAL=$((TOTAL + 1))
+    SKIPPED=$((SKIPPED + 1))
+fi
+echo ""
+
 echo "-----------------------------------"
 echo "Theme engine suites (node + headless Chromium)"
 if command -v node >/dev/null 2>&1; then

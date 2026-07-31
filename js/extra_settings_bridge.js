@@ -65,6 +65,41 @@
       return ipcRenderer.invoke("cdb-glow:set", String(mode));
     },
 
+    // Deployment mode (1P / 3P) and the third-party configuration the app boots
+    // from. deployMode() takes only "1p"/"3p"; deploySet() only keys the main
+    // side finds in its own catalog, and stored secrets never come back through
+    // deployRead()/deployRaw() - they read as a placeholder the main side maps
+    // back to "keep what is on disk".
+    deployRead: function () {
+      return ipcRenderer.invoke("cdb-deploy:read");
+    },
+    deployMode: function (mode) {
+      return ipcRenderer.invoke("cdb-deploy:mode", String(mode));
+    },
+    deploySet: function (key, value) {
+      return ipcRenderer.invoke("cdb-deploy:set", String(key), value);
+    },
+    deployClear: function () {
+      return ipcRenderer.invoke("cdb-deploy:clear");
+    },
+    deployApply: function (id) {
+      return ipcRenderer.invoke("cdb-deploy:apply", String(id || ""));
+    },
+    deployRaw: function () {
+      return ipcRenderer.invoke("cdb-deploy:raw");
+    },
+    deploySaveRaw: function (text) {
+      return ipcRenderer.invoke("cdb-deploy:save-raw", String(text));
+    },
+
+    // Open one of the files this package writes, or show it in the file manager.
+    // The first argument is a fixed LOCATION NAME the main side resolves to a
+    // path itself - a page-supplied path would be a way to have the desktop open
+    // an arbitrary file.
+    reveal: function (name, how) {
+      return ipcRenderer.invoke("cdb-extra:reveal", String(name), String(how || "open"));
+    },
+
     // Resolved config file paths, shown in both panels.
     paths: function () {
       return ipcRenderer.invoke("cdb-extra:paths");

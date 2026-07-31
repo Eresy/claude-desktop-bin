@@ -299,13 +299,9 @@ kbd{
       <h2 class="eyebrow">Gaming <span class="badge" id="count-gaming">0</span></h2>
       <div class="grid" id="grid-gaming"></div>
     </section>
-    <section id="sec-builtin" hidden>
-      <h2 class="eyebrow">Built-in <span class="badge" id="count-builtin">0</span></h2>
-      <div class="grid" id="grid-builtin"></div>
-    </section>
-    <section id="sec-community" hidden>
-      <h2 class="eyebrow">Community <span class="badge" id="count-community">0</span></h2>
-      <div class="grid" id="grid-community"></div>
+    <section id="sec-common" hidden>
+      <h2 class="eyebrow">Common <span class="badge" id="count-common">0</span></h2>
+      <div class="grid" id="grid-common"></div>
     </section>
   </main>
 
@@ -321,8 +317,8 @@ kbd{
 "use strict";
 (function () {
   var SWATCH = ["--bg-000", "--text-000", "--accent-brand", "--accent-pro-100", "--danger-100", "--warning-100", "--success-100"];
-  var SECTIONS = ["custom", "gaming", "builtin", "community"];
-  var LABEL = { custom: "Your themes", gaming: "Gaming", builtin: "Built-in", community: "Community" };
+  var SECTIONS = ["custom", "gaming", "common"];
+  var LABEL = { custom: "Your themes", gaming: "Gaming", common: "Common" };
   var state = { entries: [], active: null, cards: [] };
   var toastTimer = null;
 
@@ -464,7 +460,7 @@ kbd{
   function filter(q) {
     q = q.trim().toLowerCase();
     var shown = 0;
-    var perSection = { custom: 0, gaming: 0, builtin: 0, community: 0, stock: 0 };
+    var perSection = { custom: 0, gaming: 0, common: 0, stock: 0 };
     for (var i = 0; i < state.cards.length; i++) {
       var c = state.cards[i];
       var hit = !q || c.dataset.hay.indexOf(q) >= 0;
@@ -563,15 +559,18 @@ kbd{
   // A theme's SOURCE is its resolution tier (custom > builtin > community); its
   // CATEGORY is how it is grouped on screen. Gaming palettes ship as built-ins but
   // get their own separated section - and a gaming-category theme from any source
-  // (a community palette, or one of your own) lands there too.
+  // (a community palette, or one of your own) lands there too. Built-in and
+  // community palettes share the "Common" section: which of the two a palette
+  // ships as is a packaging detail, not a reason to look in a different list.
   function bucketOf(entry) {
     if (entry.source === "stock") return "stock";
     if (entry.category === "gaming") return "gaming";
-    return entry.source;
+    if (entry.source === "custom") return "custom";
+    return "common";
   }
 
   function render() {
-    var buckets = { stock: [], custom: [], gaming: [], builtin: [], community: [] };
+    var buckets = { stock: [], custom: [], gaming: [], common: [] };
     for (var i = 0; i < state.entries.length; i++) {
       var e = state.entries[i];
       var b = bucketOf(e);

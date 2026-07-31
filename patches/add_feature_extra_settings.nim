@@ -1,16 +1,25 @@
 # @patch-target: app.asar.contents/.vite/build/index.js
 # @patch-type: nim
 #
-# "Extra" area inside the claude.ai Settings modal (Themes + Features).
+# "Extra" area inside the claude.ai Settings modal (Themes + Features + Deployment).
 #
 # The Settings modal is rendered by the REMOTE claude.ai SPA inside the mainView
 # WebContentsView, so the UI cannot be a React route of ours: it is injected into
 # the live page. This patch is the main-process half of that.
 #
-#   * ipcMain handlers: cdb-extra:themes-list / :paths / :diag,
-#     cdb-flags:catalog / :read / :set / :unset, cdb-app:relaunch.
+#   * ipcMain handlers: cdb-extra:themes-list / :paths / :reveal / :diag,
+#     cdb-flags:catalog / :read / :set / :unset, cdb-glow:read / :set,
+#     cdb-deploy:read / :mode / :set / :apply / :raw / :save-raw, cdb-app:relaunch.
 #     cdb-themes:apply and cdb-themes:active are NOT registered here - they are
 #     owned by add_feature_theme_picker.nim and the page calls them directly.
+#   * the writer of the 1P/3P deployment mode and of the third-party configuration
+#     the app boots from. Both files are upstream's own and user-level - the
+#     persisted deploymentMode key in <userData>-3p/claude_desktop_config.json and
+#     the applied entry of <userData>-3p/configLibrary - so no patch to the
+#     bootstrap and no root is needed. /etc/claude-desktop/managed-settings.json
+#     is only ever READ (it needs root and, when valid, wins over both).
+#     The pinned key catalog in js/extra_settings_main.js is version-sensitive:
+#     re-extract it from the bundle's schema on an upstream bump.
 #   * the single writer of growthbookOverrides in <userData>/claude-desktop-extra.json
 #     (atomic tmp+rename). The .jsonc is human-owned and never created or
 #     rewritten here; entries a user put there win per flag id, and the UI shows
@@ -49,10 +58,11 @@ const EXTRA_JS = MAIN_JS.replace("\"__CDB_EX_PAGE_SRC__\"", escapeJson(PAGE_JS))
 
 const EXPECTED_PATCHES = 1
 
-# Positive end-state markers (Rule 6): the build tag, one handler name from the
-# main half, and one class name from the page half - so a partially spliced
-# payload cannot report success.
-const MARKERS = ["__cdb_extra_settings", "\"cdb-flags:set\"", "cdbx-navgroup"]
+# Positive end-state markers (Rule 6): the build tag, one handler name per panel
+# from the main half, and one class name from the page half - so a partially
+# spliced payload cannot report success.
+const MARKERS =
+  ["__cdb_extra_settings", "\"cdb-flags:set\"", "\"cdb-deploy:mode\"", "cdbx-navgroup"]
 
 proc markersPresent(s: string): int =
   for m in MARKERS:

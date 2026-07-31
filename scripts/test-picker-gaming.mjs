@@ -64,14 +64,13 @@ function names(gridId) {
 }
 function check() {
   var order = [].slice.call(document.querySelectorAll("main > section")).map(function (s) { return s.id; });
-  ok(order.join(" ") === "sec-stock sec-custom sec-gaming sec-builtin sec-community",
-     "Gaming sits between Your themes and Built-in", order.join(" "));
+  ok(order.join(" ") === "sec-stock sec-custom sec-gaming sec-common",
+     "Gaming sits between Your themes and Common", order.join(" "));
   ok(names("grid-gaming") === "my-arcade,playstation,mario,retro-crt",
      "every category=gaming theme lands in Gaming whatever its source", names("grid-gaming"));
   ok(names("grid-custom") === "mine", "a non-gaming custom theme stays in Your themes", names("grid-custom"));
-  ok(names("grid-builtin") === "nord", "a non-gaming built-in stays in Built-in", names("grid-builtin"));
-  ok(names("grid-community") === "dracula-ish", "a non-gaming community palette stays in Community",
-     names("grid-community"));
+  ok(names("grid-common") === "nord,dracula-ish",
+     "the non-gaming built-in and community palettes share Common", names("grid-common"));
   ok($("count-gaming").textContent === "4", "the Gaming badge counts 4", $("count-gaming").textContent);
   var sec = $("sec-gaming");
   ok(!sec.hidden, "the Gaming section is visible");
@@ -81,7 +80,7 @@ function check() {
   ok(cs.borderTopStyle === "solid" && parseFloat(cs.borderTopWidth) >= 1,
      "it carries the horizontal divider that sets it apart",
      cs.borderTopWidth + " " + cs.borderTopStyle + " " + cs.borderTopColor);
-  ok(getComputedStyle($("sec-builtin")).borderTopStyle === "none",
+  ok(getComputedStyle($("sec-common")).borderTopStyle === "none",
      "no stray divider on the other sections");
   var pressed = [].slice.call(document.querySelectorAll('.card[aria-pressed="true"]'))
     .map(function (c) { return c.dataset.name; });
@@ -90,11 +89,11 @@ function check() {
 
   var s = $("search");
   s.value = "gaming"; s.dispatchEvent(new Event("input"));
-  ok($("count-gaming").textContent === "4" && $("sec-builtin").hidden && $("sec-custom").hidden,
+  ok($("count-gaming").textContent === "4" && $("sec-common").hidden && $("sec-custom").hidden,
      'filtering by "gaming" leaves only the Gaming section',
      "gaming=" + $("count-gaming").textContent);
   s.value = "nord"; s.dispatchEvent(new Event("input"));
-  ok($("sec-gaming").hidden && !$("sec-builtin").hidden, "an unrelated filter hides Gaming again");
+  ok($("sec-gaming").hidden && !$("sec-common").hidden, "an unrelated filter hides Gaming again");
   s.value = ""; s.dispatchEvent(new Event("input"));
   ok($("count-gaming").textContent === "4" && !$("sec-gaming").hidden,
      "clearing the filter brings Gaming back");

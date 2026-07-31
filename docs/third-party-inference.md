@@ -2,33 +2,60 @@
 
 The upstream **Developer → Configure Third-Party Inference** wizard works on Linux as of v1.6259 (after the `ion-dist` packaging fix in #57). This page covers the Linux-specific bits that aren't in the [official Anthropic 3P docs](https://claude.com/docs/cowork/3p/installation) - which only cover macOS and Windows - plus the headless `/etc/claude-desktop/managed-settings.json` route for fleet rollouts and remote/CI machines where the wizard isn't practical.
 
-> **Migrating from `enterprise.json`?** Earlier releases of this package read managed config from `/etc/claude-desktop/enterprise.json`. The official Linux build reads `/etc/claude-desktop/managed-settings.json` natively instead. **Existing deployments must rename the file** (`sudo mv /etc/claude-desktop/enterprise.json /etc/claude-desktop/managed-settings.json`). The schema and keys are unchanged - `managedMcpServers` (array), `inferenceProvider`, `deploymentMode`, `betaFeaturesEnabled`, etc. all stay exactly as they were; only the filename moved.
+> **Migrating from `enterprise.json`?** Earlier releases of this package read managed config from `/etc/claude-desktop/enterprise.json`. The official Linux build reads `/etc/claude-desktop/managed-settings.json` natively instead. **Existing deployments must rename the file** (`sudo mv /etc/claude-desktop/enterprise.json /etc/claude-desktop/managed-settings.json`). The schema and keys are unchanged - `managedMcpServers` (array), `inferenceProvider`, `deploymentMode`, etc. all stay exactly as they were; only the filename moved. Drop `betaFeaturesEnabled` while you are at it: the current build no longer knows that key, and one unknown key makes it ignore the whole file.
 
 > **Looking for the full `managed-settings.json` key reference?** This page is the Linux *how-to*. For the complete, authoritative list of every config key, see Anthropic's official docs:
 > - [Configuration reference](https://claude.com/docs/cowork/3p/configuration) - every key, all providers, credential helpers, security profiles.
 > - [Enterprise configuration for Claude Desktop](https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop) - managed-preferences overview.
 > - [Extend Claude Cowork with third-party platforms](https://support.claude.com/en/articles/14680753-extend-claude-cowork-with-third-party-platforms) - how MCP/plugins/skills differ on 3P.
 
-## Two routes
+## Three routes
 
 | Route | When to use |
 |---|---|
-| **In-app wizard** | Single-user laptop install. You can interactively click through provider selection and credential entry. |
-| **`/etc/claude-desktop/managed-settings.json`** | Fleet/MDM rollouts, headless servers, scripted provisioning, or when you want the same config reproducibly across machines. The app reads this file synchronously at startup; settings here override the wizard. |
+| **Settings → Extra → Deployment** *(this package)* | Any single-user install, and the only route that also switches **back** to 1P. One switch for the mode, every config key as a toggle or field, no root. Written to your own profile dir, so each [profile](../README.md#multiple-profiles) has its own. |
+| **Developer → Configure Third-Party Inference** *(upstream wizard)* | Provider-guided setup with credential probing and sign-in flows (Bedrock SSO, Vertex OAuth, Entra ID). Writes to the same store as the panel above, so the two show each other's values. |
+| **`/etc/claude-desktop/managed-settings.json`** | Fleet/MDM rollouts, headless servers, scripted provisioning. Needs root, and while it is valid it replaces everything local. |
 
-Both routes write the same underlying schema. The wizard just builds it for you.
+All three write the same underlying schema; only the location and who may write it differ.
 
-## Route A: in-app wizard
+## Route A: the in-app Deployment panel
+
+**Settings → Extra → Deployment** (added by this package - see [The "Extra" Settings](../README.md#the-extra-settings)).
+
+1. **The mode switch** at the top shows what the running session is and what the next start will use. `1P` persists upstream's `deploymentMode` key, which is what lets a machine that already has a 3P config boot personal again; `3P` switches back. The mode is chosen in the bootstrap before any window exists, so the panel asks for a restart when the two disagree.
+2. **Pick a provider** under *Inference & connection*. The provider-specific fields (gateway URL and key, Vertex project and region, Bedrock region and profile, Foundry resource, …) appear once the provider is selected; "Show keys for every provider" reveals the rest.
+3. **Everything else is a toggle or a field**, grouped the way upstream's own schema groups it: surfaces and sandbox (Chat/Cowork/Code tabs, workspace folders, egress allowlist, disabled built-in tools), connectors and extensions, plugins, telemetry and updates, usage limits, branding, bootstrap. A key you never touch stays absent from the file, and Claude Desktop uses its own default.
+4. **The file itself** is at the bottom - a raw JSON editor for anything the form does not cover, and links that open the config file, the mode file and the policy file in your editor or file manager.
+
+Where it writes (`~/.config/Claude-3p/`, or `~/.config/Claude-<profile>-3p/` for a named profile):
+
+| File | Holds |
+|---|---|
+| `configLibrary/<id>.json` | The configuration itself, in the same flat schema as `managed-settings.json`. The panel edits the **applied** entry, which is the one upstream's own wizard uses too. |
+| `configLibrary/_meta.json` | Which entry is applied (`appliedId`) and the list of stored ones. The panel's *Active configuration* picker switches between them; picking **None** boots 1P and leaves every file on disk. |
+| `claude_desktop_config.json` | The persisted `deploymentMode` (`"1p"` / `"3p"`), which is also what `claude-desktop --1p` / `--3p` write. |
+
+Both files are written `0600` in a `0700` directory, because they hold inference credentials. A stored credential is **write-only** in the panel: it can be replaced, never displayed. Two keys stay read-only there and must be deployed through the policy file: `disableDeploymentModeChooser` (it disables claude.ai sign-in, i.e. it is exactly what locks a machine into 3P) and `managedMcpServers` (an entry can start a process).
+
+To promote a working local config to a fleet policy, copy it and restart:
+
+```bash
+sudo install -d -m 755 /etc/claude-desktop
+sudo install -m 644 ~/.config/Claude-3p/configLibrary/*.json /etc/claude-desktop/managed-settings.json
+```
+
+## Route B: upstream's in-app wizard
 
 1. **Enable Developer Mode** (the menu item is hidden otherwise):
    - Click your avatar (bottom-left) → **Settings** → toggle **Developer Mode** on.
    - Restart Claude Desktop.
 2. New top-level menu **Developer** appears. Click **Developer → Configure Third-Party Inference**.
-3. Pick your provider, fill credentials, save. The wizard writes the same JSON as Route B.
+3. Pick your provider, fill credentials, save. The wizard writes the same JSON as Route C, into the same store as Route A.
 
-If the menu item opens an empty window, you're on a build before #57 landed (`ion-dist` directory missing). Update to v1.6259+ or use Route B.
+If the menu item opens an empty window, you're on a build before #57 landed (`ion-dist` directory missing). Update to v1.6259+ or use Route A.
 
-## Route B: manual `managed-settings.json`
+## Route C: manual `managed-settings.json`
 
 The app reads `/etc/claude-desktop/managed-settings.json` on every launch. Setting `inferenceProvider` flips the app into 3P mode and bypasses the personal claude.ai sign-in flow.
 
@@ -163,7 +190,6 @@ sudo tee /etc/claude-desktop/managed-settings.json >/dev/null <<'JSON'
     { "name": "claude-sonnet-4-6" }
   ],
   "disableDeploymentModeChooser": true,
-  "betaFeaturesEnabled": true,
   "chatTabEnabled": true,
   "coworkTabEnabled": true
 }
@@ -171,7 +197,9 @@ JSON
 sudo chmod 644 /etc/claude-desktop/managed-settings.json
 ```
 
-> **Surface toggles** (all `scopes:["3p"]`): `chatTabEnabled` brings back the **Chat** tab (the claude.ai web surface), `coworkTabEnabled` the **Cowork** tab, and `betaFeaturesEnabled` unlocks the beta-feature set those live under. `isClaudeCodeForDesktopEnabled` controls the **Code** tab. Omit one to hide that surface. See the [maximum example](#maximum-managed-settingsjson-every-key) below for the full set.
+> **Surface toggles** (all `scopes:["3p"]`): `chatTabEnabled` brings back the **Chat** tab (the claude.ai web surface), `coworkTabEnabled` the **Cowork** tab, and `isClaudeCodeForDesktopEnabled` the **Code** tab. Omit one to hide that surface. At least one surface has to stay on - the app re-enables Cowork if you switch them all off. See the [maximum example](#maximum-managed-settingsjson-every-key) below for the full set.
+
+> **Every key in this file must be one the running build knows.** A single unrecognized key makes Claude Desktop discard the **whole** managed file (`[managedConfig] Ignoring …: unrecognized configuration key`) and fall back to no policy at all - so drop keys you copied from an older deployment rather than leaving them in "just in case". `betaFeaturesEnabled` is one of those: it was accepted by builds up to ~v1.14271 and is gone in v1.24012.9. The [Deployment panel](#route-a-the-in-app-deployment-panel) renders the current build's key set and refuses to write anything outside it, which is the cheapest way to check a file.
 
 **4. Restart and verify** (see [Verifying it worked](#verifying-it-worked) for the full log signature):
 
@@ -189,7 +217,7 @@ You should see `[custom-3p] 3P mode active { provider: 'gateway' }` and an ident
 
 ## Maximum `managed-settings.json` (every key)
 
-The quickstart above is intentionally minimal. Below is a **feature-complete** gateway config that turns on every surface and shows the governance, telemetry, sandbox, and plugin knobs an enterprise rollout typically wants. Every key here is a real managed-config setting in v1.14271.0 (`scopes:["3p"]` or `["3p","1p"]`); add only the ones you need. Keys marked **secret** must hold real credentials - keep this file readable only as needed and never commit real values.
+The quickstart above is intentionally minimal. Below is a **feature-complete** gateway config that turns on every surface and shows the governance, telemetry, sandbox, and plugin knobs an enterprise rollout typically wants. Every key here is a real managed-config setting in v1.24012.9 (`scopes:["3p"]` or `["3p","1p"]`); add only the ones you need - and only ones the running build knows, or the whole file is ignored. Settings → **Extra** → **Deployment** lists this build's full key set with the same grouping. Keys marked **secret** must hold real credentials - keep this file readable only as needed and never commit real values.
 
 ```jsonc
 {
@@ -209,7 +237,6 @@ The quickstart above is intentionally minimal. Below is a **feature-complete** g
   "disableDeploymentModeChooser": true,           // lock to 3P; hide personal claude.ai sign-in
 
   // ── Surfaces / tabs ─────────────────────────────────────────────────────
-  "betaFeaturesEnabled": true,                    // unlocks the beta-feature set below
   "chatTabEnabled": true,                         // the Chat tab (claude.ai web surface)
   "coworkTabEnabled": true,                       // the Cowork tab
   "isClaudeCodeForDesktopEnabled": true,          // the Code tab (Claude Code)
@@ -297,6 +324,7 @@ python3 -c 'import json; json.load(open("/etc/claude-desktop/managed-settings.js
   2. the *applied* local-settings entry under `~/.config/Claude-3p/configLibrary/` - written by the in-app 3P Setup UI and consulted on every launch, even after the managed file is deleted. **This is the sticky part:** a leftover entry like `{"inferenceProvider": "gateway"}` keeps forcing 3P (degraded - `Credentials read failed … baseUrl: Required`, `inference apiHost=http://custom-3p-unused.invalid`) with no `/etc` file present. The `configLibrary/` is always read from the `-3p` dir (per-profile: `Claude-NAME-3p`), regardless of which userData dir ends up active.
 
   If the chosen config has an inference block, the app boots 3P and relocates userData to `~/.config/Claude-3p/` - *unless* the persisted `"deploymentMode"` key in `~/.config/Claude-3p/claude_desktop_config.json` is `"1p"`, which forces 1P even while a 3P config is still stored. (Exception: a managed config with `authentication.disableClaudeAiSignIn: true` always wins - enterprise-enforced 3P cannot be overridden.) To switch modes:
+  - **In the app (this package):** Settings → **Extra** → **Deployment**, the switch at the top. It writes the same `deploymentMode` key, shows which mode the next start will use and why, and offers the restart. See [Route A](#route-a-the-in-app-deployment-panel).
   - **Launcher flags (this package):** `claude-desktop --1p` or `claude-desktop --3p` persist the `deploymentMode` key for you. Persistent until switched back; takes effect on the next full start, so quit any running instance first. The upstream one-shot flag `--boot-1p-once` from the MSIX-era builds was **removed** in the official `.deb` bundle and is no longer read - the persisted key is the only user-side switch left.
   - **Manual equivalent:**
     ```bash
@@ -308,7 +336,7 @@ python3 -c 'import json; json.load(open("/etc/claude-desktop/managed-settings.js
     print("deploymentMode set")
     PY
     ```
-  - **Full reset:** to make 1P the default without relying on the override key, also delete the stored 3P settings so no config source can select 3P: `rm -rf ~/.config/Claude-3p/configLibrary` (you will re-enter provider settings in Setup if you return to 3P).
+  - **Full reset:** to make 1P the default without relying on the override key, stop any config source from selecting 3P. In the Deployment panel, set *Active configuration* to **None** - that clears `appliedId` and keeps every stored configuration on disk, so returning to 3P is one click. The destructive equivalent is `rm -rf ~/.config/Claude-3p/configLibrary` (you will re-enter provider settings in Setup if you return to 3P).
 
   Plain `claude-desktop` in 1P mode uses `~/.config/Claude/` again. Re-adding `managed-settings.json` (or `--3p`, if a stored provider config exists) switches back to 3P. (`deploymentMode` and the config sources are upstream Anthropic mechanisms; `--1p`/`--3p` are launcher conveniences added by this package.)
 - **`global` region requires Vertex's global endpoint to be enabled** for your project - newer projects have this on by default; older ones may need to be enabled in the Cloud Console under Vertex AI Studio settings.
