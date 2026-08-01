@@ -81,6 +81,10 @@
 
   // LIVE-CONFIRMED selectors.
   var CLOSE_CONTROL_SELECTOR = ".epitaxy-pane-close-control"; // per-view chrome handle
+  // DUPLICATED ON PURPOSE: the same literal is HEADER_SELECTOR in
+  // js/diff_views_expand.js (which classifies these headers on its own, without
+  // importing anything from here). A claude.ai redeploy that renames this class
+  // MUST change BOTH sites.
   var FILE_HEADER_SELECTOR = "button.epitaxy-panel-subheader"; // PER-FILE header button
   var FILE_CONTENT_SELECTOR = ".epitaxy-diff-panel";           // EXPANDED per-file content
   var VIEW_CONTAINER_SELECTOR = ".epitaxy-view-panel";         // generic side-panel wrapper
@@ -124,7 +128,10 @@
     ".cdb-dv-select-inline{margin-left:8px;margin-right:8px;height:22px;line-height:20px;padding:1px 4px}",
     // Transient cue while the main process applies the mode. Opacity only - no
     // layout surgery, nothing that could shift the stock chrome row.
-    ".cdb-dv-select[data-cdb-dv-pending=\"1\"]{opacity:.6}"
+    ".cdb-dv-select[data-cdb-dv-pending=\"1\"]{opacity:.6}",
+    // Armed (sticky expand) look. Background only - never a metric, or we would
+    // be re-styling the control we cloned precisely to inherit its metrics.
+    ".cdb-dv-toggle[data-cdb-dv-armed=\"1\"]{background:hsl(var(--bg-300,0 0% 25%) / 0.9)}"
   ].join("");
 
   function el(tag, cls, text) {
@@ -133,6 +140,10 @@
     if (text != null) e.textContent = text;
     return e;
   }
+
+  // The module half logs through us, so every line lands on the one channel
+  // ~/.config/Claude/logs/claude.ai-web.log actually forwards.
+  function dvLog(m) { console.warn("[cdb-dv] " + m); }
 
   // ------------------------------------------------------------------ //
   // Topology resolution                                                  //
@@ -607,7 +618,7 @@
   // The dropdown                                                         //
   // ------------------------------------------------------------------ //
 
-  function createUi(mountSelect) {
+  function createUi(mount, view, closeControl) {
     var select = el("select", "cdb-dv-select cdb-dv-select-inline");
     MODE_OPTIONS.forEach(function (o) {
       var opt = el("option", null, o.label);
@@ -616,7 +627,20 @@
     });
     select.title = "Diff scope: " + labelForMode(MODES.WORKING);
 
-    mountSelect(select);
+    // The expand/collapse-all half is optional by construction: if the module
+    // is missing or refuses to mount, the dropdown still works alone.
+    var expand = null;
+    if (window.__cdbDvExpandAll && typeof window.__cdbDvExpandAll.create === "function") {
+      try {
+        expand = window.__cdbDvExpandAll.create(view, closeControl, dvLog);
+      } catch (e) {
+        expand = null;
+        console.warn("[cdb-dv] expand-all threw while mounting: " + String(e));
+      }
+      if (!expand) console.warn("[cdb-dv] expand-all not mounted");
+    }
+
+    mount(select, expand && expand.button);
 
     // A dropdown is a fresh DOM node per view mount, so its value is only a
     // guess: seed it from the last mode the main process reported, then re-read
@@ -651,6 +675,8 @@
 
     select.addEventListener("change", function () {
       var mode = select.value;
+      // Disarm before anything async: the new file list must not be mass-expanded.
+      if (expand) { try { expand.notifyModeChange(); } catch (e) {} }
       // Belt and braces: a disabled <option> is not selectable in any browser we
       // ship on, but if one ever were, sending the mode would reproduce exactly
       // the silent "looks like Working tree" bug. Refuse and say why.
@@ -697,7 +723,7 @@
       });
     });
 
-    return { select: select };
+    return { select: select, expand: expand };
   }
 
   // ------------------------------------------------------------------ //
@@ -713,9 +739,39 @@
   function pruneInstalls() {
     var out = [];
     for (var i = 0; i < installs.length; i++) {
-      if (document.contains(installs[i].row)) out.push(installs[i]);
+      if (document.contains(installs[i].row)) { out.push(installs[i]); continue; }
+      // The row is gone: tear the WHOLE install down, not just the expand half,
+      // or two things break independently. Leaving the expand half wired would
+      // keep its observer living on `view`, and an armed instance goes on
+      // clicking headers open with no button left on screen to stop it. Leaving
+      // the <select> in place would orphan it beside a second dropdown the next
+      // time this exact row node gets re-attached (a detach/reattach cycle, not
+      // a genuine unmount, still leaves `document.contains()` false in between).
+      // This is the ORDINARY unmount path; removeAllUi() and the reinstall
+      // branch are the exceptional ones. teardownRow() may reach destroy()
+      // again afterwards, which is safe: destroy() is idempotent (see
+      // js/diff_views_expand.js).
+      teardownRow(installs[i].row);
     }
     installs = out;
+  }
+
+  // Remove BOTH of our nodes from one chrome row and tear the expand half down
+  // (observer disconnected, pending repaint cancelled, button unmounted).
+  // Returns true when a dropdown was really on screen, so callers can report an
+  // honest count. Leaves the row in the same state a never-installed row is in,
+  // so a later sweep reinstalls cleanly instead of adding a second dropdown
+  // beside an orphaned one.
+  function teardownRow(row) {
+    var ui = row && row.__cdbDvUi;
+    var removed = false;
+    if (ui && ui.select && ui.select.parentNode) {
+      ui.select.parentNode.removeChild(ui.select);
+      removed = true;
+    }
+    if (ui && ui.expand) { try { ui.expand.destroy(); } catch (e) {} }
+    if (row) { row.__cdbDv = false; row.__cdbDvUi = null; }
+    return removed;
   }
 
   function recordInstall(row, view) {
@@ -757,18 +813,12 @@
   var prefSeen = false;    // have we had an answer from main at all yet?
 
   // Returns how many rows it cleared, so the diagnostic can be honest whether
-  // the switch went off with dropdowns on screen or before any were mounted.
-  function removeAllDropdowns() {
+  // the switch went off with UI on screen or before any was mounted.
+  function removeAllUi() {
     pruneInstalls();
     var n = 0;
     for (var i = 0; i < installs.length; i++) {
-      var row = installs[i].row;
-      var ui = row && row.__cdbDvUi;
-      if (ui && ui.select && ui.select.parentNode) {
-        ui.select.parentNode.removeChild(ui.select);
-        n++;
-      }
-      if (row) { row.__cdbDv = false; row.__cdbDvUi = null; }
+      if (teardownRow(installs[i].row)) n++;
     }
     installs = [];
     return n;
@@ -785,7 +835,7 @@
     prefSeen = true;
     prefOn = on;
     if (!on) {
-      var removed = removeAllDropdowns();
+      var removed = removeAllUi();
       console.warn(first
         ? "[cdb-dv] disabled by preference - the feature is opt-in and not switched on; " +
           "the diff panel stays exactly as Anthropic ships it"
@@ -813,6 +863,31 @@
   // the mode kept applying main-side, i.e. exactly the silent desync reported.
   // An install in a hidden row cannot serve anyone, so it must not block a
   // visible one.
+  // TWO LIVE INSTANCES ON ONE VIEW FIGHT EACH OTHER. viewServedByDisplayedRow()
+  // deliberately lets a second install through when the serving row is hidden
+  // (the fullscreen fix above) - but neither instance knows about the other, and
+  // both expand halves observe the SAME `view`. Reproduced: A is armed, the user
+  // collapses via B (B disarms and closes everything), the next per-file patch
+  // lands, and still-armed A re-expands it. The hidden row is the one that has
+  // to go: nothing on screen can disarm it.
+  //
+  // Torn down WHOLE, not just destroy()'d, so the row is left exactly as a
+  // never-installed row - otherwise the orphaned <select> would still be sitting
+  // there when the row is displayed again and the reinstall would put a second
+  // one next to it.
+  function dropHiddenInstallsForView(view, row) {
+    var out = [];
+    for (var i = 0; i < installs.length; i++) {
+      var rec = installs[i];
+      if (rec.view !== view || rec.row === row || isDisplayed(rec.row)) {
+        out.push(rec);
+        continue;
+      }
+      teardownRow(rec.row);
+    }
+    installs = out;
+  }
+
   function viewServedByDisplayedRow(view, row) {
     pruneInstalls();
     for (var i = 0; i < installs.length; i++) {
@@ -843,14 +918,15 @@
     // the row first keeps that from being treated as "not a diff view".
     if (row.__cdbDv) {
       var prev = row.__cdbDvUi;
-      // Healthy install: our select is still inside this chrome row. (There is
-      // nothing else to re-validate any more - we track no stock nodes.)
-      if (prev && prev.select && row.contains(prev.select)) return false;
-      // The row survived but its children were re-rendered and our select went
-      // with them - drop the stale reference and reinstall below.
+      // Healthy install: BOTH our nodes are still inside this chrome row. A
+      // partial re-render that kept one and dropped the other has to reinstall
+      // both, or the survivor is left orphaned next to a fresh copy.
+      if (prev && prev.select && row.contains(prev.select) &&
+          (!prev.expand || row.contains(prev.expand.button))) return false;
       if (prev && prev.select && prev.select.parentNode) {
         prev.select.parentNode.removeChild(prev.select);
       }
+      if (prev && prev.expand) { try { prev.expand.destroy(); } catch (e) {} }
       row.__cdbDv = false;
     }
 
@@ -858,6 +934,12 @@
     if (!view) { logUnqualifiedOnce(closeControl); return false; }
 
     if (viewServedByDisplayedRow(view, row)) return false;
+
+    // We are about to serve this view from THIS row, so no OTHER row may keep a
+    // live install for it. Only hidden rows can be in that position (a displayed
+    // one would have returned above), and a hidden row's armed expand half is
+    // exactly the instance that fights this one.
+    dropHiddenInstallsForView(view, row);
 
     // Name the path once, so a field log distinguishes "installed on a real diff
     // view" from "installed on an empty panel our own scope emptied".
@@ -870,9 +952,14 @@
 
     row.__cdbDv = true;
 
-    var ui = createUi(function (select) {
-      row.insertBefore(select, controlClusterStart(closeControl));
-    });
+    var ui = createUi(function (select, button) {
+      // [select] [toggle] [⤢] [✕]. Our own button is control-like, so a later
+      // controlClusterStart() walk goes PAST it and keeps putting the select on
+      // its left - which is the order we want, by construction.
+      var ref = controlClusterStart(closeControl);
+      if (button) row.insertBefore(button, ref);
+      row.insertBefore(select, button || ref);
+    }, view, closeControl);
 
     row.__cdbDvUi = ui;
     recordInstall(row, view);

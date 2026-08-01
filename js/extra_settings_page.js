@@ -1001,8 +1001,9 @@
       title: "Diff view modes",
       note: "Adds a scope dropdown to the Code tab's diff panel - Working tree, Branch changes " +
         "(committed work only) and Latest turn - and compares against the branch you actually " +
-        "branched from. Off leaves the panel exactly as Anthropic ships it.",
-      ariaLabel: "show the diff view modes dropdown",
+        "branched from. Also adds an expand/collapse-all button next to it, which keeps expanding " +
+        "files as they load while it is on. Off leaves the panel exactly as Anthropic ships it.",
+      ariaLabel: "show the diff view modes dropdown and the expand/collapse-all button",
       read: "diffViewsRead",
       write: "diffViewsSet",
       lockFile: "claude-desktop-extra.jsonc",
@@ -1010,12 +1011,12 @@
       // renders as off rather than claiming a feature that is not running.
       isOn: function (res) { return res.enabled === true; },
       describe: function (on) {
-        return on ? "on - dropdown shown in the diff panel" : "off - stock single view";
+        return on ? "on - dropdown and expand/collapse-all in the diff panel" : "off - stock single view";
       },
       writeArg: function (next) { return next; },
       toast: function (next) {
         return next
-          ? "Diff view modes on - the dropdown is back in the diff panel"
+          ? "Diff view modes on - the dropdown and expand/collapse-all are back in the diff panel"
           : "Diff view modes off - the diff panel is stock again";
       },
       errorPrefix: "Could not change diff view modes: "

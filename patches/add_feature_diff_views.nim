@@ -2,9 +2,9 @@
 # @patch-type: nim
 #
 # Diff view modes (Working tree / Branch changes / Latest turn) for the Code
-# tab. Injects js/diff_views_main.js (with js/diff_views_page.js embedded)
-# into the main bundle. Counterpart preload bridge:
-# patches/add_feature_diff_views_bridge.nim.
+# tab. Injects js/diff_views_main.js (with js/diff_views_expand.js +
+# js/diff_views_page.js embedded, in that order) into the main bundle.
+# Counterpart preload bridge: patches/add_feature_diff_views_bridge.nim.
 #
 # Break risk: VERY LOW for the injection (stable "use strict"; anchor, no
 # regex on minified code). The page half keys off remote epitaxy DOM and
@@ -14,6 +14,7 @@ import std/[os, strutils]
 
 const MAIN_JS = staticRead("../js/diff_views_main.js")
 const PAGE_JS = staticRead("../js/diff_views_page.js")
+const EXPAND_JS = staticRead("../js/diff_views_expand.js")
 
 const MARKER = "__CDB_DIFF_VIEWS__"
 const PLACEHOLDER = "\"__CDB_DV_PAGE_SRC__\""
@@ -28,7 +29,11 @@ proc escapeJs(s: string): string =
 proc buildInjection(): string =
   if PLACEHOLDER notin MAIN_JS:
     raise newException(ValueError, "diff_views_main.js lost its page-src placeholder")
-  MAIN_JS.replace(PLACEHOLDER, "\"" & escapeJs(PAGE_JS) & "\"")
+  # ORDER MATTERS: the expand module defines window.__cdbDvExpandAll, which the
+  # page script reads while it builds the chrome row. Both halves are evaluated
+  # as ONE string, so the module simply goes first.
+  let pageSrc = EXPAND_JS & "\n;\n" & PAGE_JS
+  MAIN_JS.replace(PLACEHOLDER, "\"" & escapeJs(pageSrc) & "\"")
 
 proc apply*(input: string): string =
   result = input

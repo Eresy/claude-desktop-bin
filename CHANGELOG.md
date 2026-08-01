@@ -2,6 +2,20 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-01
+
+### Expand or collapse every file in the Code tab's diff panel
+
+The diff panel opens one file at a time. A new button in the panel's own header row, between the scope dropdown and the ⤢/✕ controls, does the whole list at once.
+
+Expanding is not a single sweep, and cannot be: the app fetches each file's patch lazily as it scrolls into view, and a file whose patch has not arrived has a disabled header that cannot be expanded at all. So one press expands everything already loaded and **stays armed** - files keep expanding as you scroll and their patches land. Press again to collapse everything and turn that off. Collapsing runs bottom-up on purpose: the app scrolls each file into view as it closes, so top-down would leave you staring at the bottom of the diff.
+
+It never fights you. A file you collapse by hand stays collapsed, even while the button is armed. Changing the diff scope disarms it, so a large branch diff is never dumped open unasked, and closing the last open file by hand disarms it too - the button then reads Expand again rather than promising a Collapse it no longer offers. Closing the panel, or expanding it to fullscreen, tears the old instance down instead of leaving it running invisibly.
+
+The button is a clone of its neighbouring control, so it inherits the panel's hover, focus ring and theme rather than approximating them, and its caret glyph comes from Anthropic's own icon font - but only after two checks agree it will actually draw: the font is loaded, and a canvas ink probe finds ink at **both** codepoints it can paint (the expand caret and the collapse caret). That font renders nothing at all for an unmapped codepoint, so a codepoint that shifts in a future release would silently produce an invisible button - and when the font is missing altogether, the browser substitutes one whose tofu box the ink check alone would read as success. Either check failing leaves the hand-drawn SVG in place.
+
+Part of the existing **Diff view modes** switch (Settings → Extra → Features), still off by default. A new headless-Chromium suite, `scripts/test-diff-views-expand-dom.mjs`, covers placement, the ARIA contract, both press directions, sticky expansion, auto-disarm, and every teardown path (panel unmount, fullscreen, feature switch); a missing icon font is reported as an explicit SKIP rather than quietly shrinking the run. Also fixed a build trap found on the way: `patches/Makefile` had no `staticRead` dependency line for `add_feature_diff_views`, so editing its JS did not rebuild the patch binary - and `scripts/validate-patches.sh` piped this suite through `sed`, so it reported PASS on the pipeline's exit status no matter how many assertions failed.
+
 ## 2026-07-31
 
 ### Settings → Extra → Deployment: a 1P/3P switch, and the whole 3P config as toggles
