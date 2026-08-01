@@ -65,6 +65,18 @@
       return ipcRenderer.invoke("cdb-glow:set", String(mode));
     },
 
+    // Diff view modes (the Code tab's diff-scope dropdown). BOTH channels are
+    // owned by patches/add_feature_diff_views.nim, not by the settings patch:
+    // that patch reads and writes `diffViewModes` and applies it live, the same
+    // cross-patch arrangement as cdb-themes:apply above. set() takes a plain
+    // boolean and the main side re-validates the type.
+    diffViewsRead: function () {
+      return ipcRenderer.invoke("cdb-diff:pref-read");
+    },
+    diffViewsSet: function (enabled) {
+      return ipcRenderer.invoke("cdb-diff:pref-set", enabled === true);
+    },
+
     // Deployment mode (1P / 3P) and the third-party configuration the app boots
     // from. deployMode() takes only "1p"/"3p"; deploySet() only keys the main
     // side finds in its own catalog, and stored secrets never come back through

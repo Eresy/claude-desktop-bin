@@ -901,27 +901,33 @@
     return (entry.displayName || entry.name || "").toLowerCase();
   }
 
-  // --- motion: the pulsing Cowork glow ------------------------------------
-  // Sits at the top of the Features panel rather than in its own nav entry - it
-  // is ours and applies live, so it goes ahead of the GrowthBook flag list.
-  function renderGlowRow(panel) {
-    // The bridge half of this switch lives in the mainView preload. If an older
-    // preload is in place (a partially updated install), skip the row instead of
-    // throwing and taking the whole Features panel down with it.
-    if (!api || typeof api.glowRead !== "function" || typeof api.glowSet !== "function") return;
+  // --- ONE TOGGLE ROW, TWO USES -------------------------------------------
+  // Both of our own switches (Source control, Motion) are the same widget: a
+  // section heading, a titled row with a note and a state line, a
+  // role="switch" button, a read call that fills it in, and a write call that
+  // flips it and toasts. They were two ~90-line near-verbatim copies; the only
+  // real differences are the strings, the two bridge method names, and how a
+  // response maps to on/off. Those are the spec below.
+  //
+  // ONE SPELLING FOR THE LOCK. Both main-side handlers report a hand-edited
+  // .jsonc as `lockedByJsonc` - the page previously spoke of `locked` for one
+  // row and `lockedByJsonc` for the other, for no reason beyond the order they
+  // were written in.
+  function renderToggleRow(panel, spec) {
+    // The bridge half of these switches lives in the mainView preload. On a
+    // partially updated install (older preload, newer page) skip the row instead
+    // of throwing and taking the whole Features panel down with it.
+    if (!api || typeof api[spec.read] !== "function" || typeof api[spec.write] !== "function") return;
 
     var head = el("div", "cdbx-sec-h");
-    head.appendChild(el("span", "cdbx-sec-t", "Motion"));
+    head.appendChild(el("span", "cdbx-sec-t", spec.section));
     panel.appendChild(head);
 
     var host = el("div", "cdbx-list");
     var node = el("div", "cdbx-row");
     var main = el("div", "cdbx-row-main");
-    main.appendChild(el("div", "cdbx-id", "Calm the Cowork glow"));
-    // Keep this short: the mechanism and the GPU reasoning belong in the README
-    // and the patch header, not in front of the user.
-    main.appendChild(el("div", "cdbx-note",
-      "Stops the Cowork hero glow from pulsing and dims it. Easier on laptops and weak GPUs. Applies live."));
+    main.appendChild(el("div", "cdbx-id", spec.title));
+    main.appendChild(el("div", "cdbx-note", spec.note));
     var stateLine = el("div", "cdbx-state", "Loading...");
     main.appendChild(stateLine);
     node.appendChild(main);
@@ -932,31 +938,31 @@
     toggle.type = "button";
     toggle.setAttribute("role", "switch");
     toggle.setAttribute("aria-checked", "false");
-    toggle.setAttribute("aria-label", "calm the Cowork glow");
+    toggle.setAttribute("aria-label", spec.ariaLabel);
     toggle.disabled = true;
     aside.appendChild(toggle);
 
     host.appendChild(node);
     panel.appendChild(host);
 
-    api.glowRead().then(function (res) {
+    function isOn() { return toggle.getAttribute("aria-checked") === "true"; }
+
+    api[spec.read]().then(function (res) {
       if (failed(res)) {
         stateLine.textContent = "Unavailable: " + reason(res);
         return;
       }
-      var pct = Math.round((res.opacity || 0) * 100);
-      function describe() {
-        return toggle.getAttribute("aria-checked") === "true"
-          ? "calm - static at " + pct + "% opacity"
-          : "pulsing (claude.ai default)";
-      }
-      toggle.setAttribute("aria-checked", res.mode === "calm" ? "true" : "false");
+      function describe() { return spec.describe(isOn(), res); }
+      toggle.setAttribute("aria-checked", spec.isOn(res) ? "true" : "false");
 
       // A hand-edited .jsonc wins the startup merge, so the switch must not
       // pretend it can override it.
+      // Truthy, not === true: the two handlers answer differently in KIND - the
+      // diff-views one with a boolean, the glow one with the locking value
+      // itself ("pulse"/"calm") or null. Both mean "the .jsonc decided this".
       if (res.lockedByJsonc) {
-        toggle.title = "Edit claude-desktop-bin.jsonc to change this";
-        stateLine.textContent = describe() + " - set in claude-desktop-bin.jsonc";
+        toggle.title = "Edit " + spec.lockFile + " to change this";
+        stateLine.textContent = describe() + " - set in " + spec.lockFile;
         return;
       }
 
@@ -964,25 +970,86 @@
       stateLine.textContent = describe();
       toggle.addEventListener("click", function () {
         if (toggle.disabled) return;
-        var next = toggle.getAttribute("aria-checked") !== "true";
+        var next = !isOn();
         toggle.disabled = true;
-        api.glowSet(next ? "calm" : "pulse").then(function (r) {
+        api[spec.write](spec.writeArg(next)).then(function (r) {
           toggle.disabled = false;
-          if (failed(r)) { toast("Could not change the glow: " + reason(r), true); return; }
+          if (failed(r)) { toast(spec.errorPrefix + reason(r), true); return; }
           toggle.setAttribute("aria-checked", next ? "true" : "false");
           stateLine.textContent = describe();
           node.classList.add("cdbx-flash");
           setTimeout(function () { node.classList.remove("cdbx-flash"); }, 700);
-          toast(next
-            ? "Cowork glow calmed in " + r.windows + " window(s)"
-            : "Cowork glow restored to pulsing");
+          toast(spec.toast(next, r));
         }, function (err) {
           toggle.disabled = false;
-          toast("Could not change the glow: " + (err && err.message ? err.message : String(err)), true);
+          toast(spec.errorPrefix + (err && err.message ? err.message : String(err)), true);
         });
       });
     }, function (err) {
       stateLine.textContent = "Unavailable: " + (err && err.message ? err.message : String(err));
+    });
+  }
+
+  // --- source control: the Code tab's diff view modes ----------------------
+  // Ours, and it applies live, so it sits above the GrowthBook list and outside
+  // the restart notice - exactly like the Motion row below. The switch is OFF by
+  // default: the feature reshapes Anthropic's own diff panel, so it is opt-in and
+  // this row is the way to ask for it.
+  function renderDiffViewsRow(panel) {
+    renderToggleRow(panel, {
+      section: "Source control",
+      title: "Diff view modes",
+      note: "Adds a scope dropdown to the Code tab's diff panel - Working tree, Branch changes " +
+        "(committed work only) and Latest turn - and compares against the branch you actually " +
+        "branched from. Off leaves the panel exactly as Anthropic ships it.",
+      ariaLabel: "show the diff view modes dropdown",
+      read: "diffViewsRead",
+      write: "diffViewsSet",
+      lockFile: "claude-desktop-extra.jsonc",
+      // Opt-in: only an explicit true is on, so a shape we do not understand
+      // renders as off rather than claiming a feature that is not running.
+      isOn: function (res) { return res.enabled === true; },
+      describe: function (on) {
+        return on ? "on - dropdown shown in the diff panel" : "off - stock single view";
+      },
+      writeArg: function (next) { return next; },
+      toast: function (next) {
+        return next
+          ? "Diff view modes on - the dropdown is back in the diff panel"
+          : "Diff view modes off - the diff panel is stock again";
+      },
+      errorPrefix: "Could not change diff view modes: "
+    });
+  }
+
+  // --- motion: the pulsing Cowork glow ------------------------------------
+  // Sits at the top of the Features panel rather than in its own nav entry - it
+  // is ours and applies live, so it goes ahead of the GrowthBook flag list.
+  function renderGlowRow(panel) {
+    renderToggleRow(panel, {
+      section: "Motion",
+      title: "Calm the Cowork glow",
+      // Keep this short: the mechanism and the GPU reasoning belong in the README
+      // and the patch header, not in front of the user.
+      note: "Stops the Cowork hero glow from pulsing and dims it. Easier on laptops and weak GPUs. " +
+        "Applies live.",
+      ariaLabel: "calm the Cowork glow",
+      read: "glowRead",
+      write: "glowSet",
+      lockFile: "claude-desktop-bin.jsonc",
+      isOn: function (res) { return res.mode === "calm"; },
+      describe: function (on, res) {
+        return on
+          ? "calm - static at " + Math.round((res.opacity || 0) * 100) + "% opacity"
+          : "pulsing (claude.ai default)";
+      },
+      writeArg: function (next) { return next ? "calm" : "pulse"; },
+      toast: function (next, r) {
+        return next
+          ? "Cowork glow calmed in " + r.windows + " window(s)"
+          : "Cowork glow restored to pulsing";
+      },
+      errorPrefix: "Could not change the glow: "
     });
   }
 
@@ -1124,8 +1191,9 @@
     clear(panel);
     panel.appendChild(el("div", "cdbx-h1", "Features"));
 
-    // Ours, and it applies live - so it goes above the GrowthBook description
+    // Ours, and they apply live - so they go above the GrowthBook description
     // and the restart notice, both of which only speak for the flag list.
+    renderDiffViewsRow(panel);
     renderGlowRow(panel);
 
     panel.appendChild(el("div", "cdbx-sub",
