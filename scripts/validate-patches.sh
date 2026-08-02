@@ -191,7 +191,17 @@ if command -v node >/dev/null 2>&1 && {
         command -v google-chrome-stable >/dev/null 2>&1 ||
         command -v google-chrome >/dev/null 2>&1; }; then
     TOTAL=$((TOTAL + 1))
-    if node "$(dirname "$0")/test-extra-settings-dom.mjs" 2>&1 | sed 's/^/  /'; then
+    # The NODE exit status decides, never the pipeline's: `node ... | sed`
+    # reports sed's status, which is always 0.
+    ES_LOG="$(mktemp)"
+    if node "$(dirname "$0")/test-extra-settings-dom.mjs" >"$ES_LOG" 2>&1; then
+        ES_RC=0
+    else
+        ES_RC=$?
+    fi
+    sed 's/^/  /' "$ES_LOG"
+    rm -f "$ES_LOG"
+    if [ "$ES_RC" -eq 0 ]; then
         echo "  Status: PASS"
         PASSED=$((PASSED + 1))
     else

@@ -4,43 +4,6 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 ## 2026-08-01
 
-### Expand or collapse every file in the Code tab's diff panel
-
-The diff panel opens one file at a time. A new button in the panel's own header row, between the scope dropdown and the ⤢/✕ controls, does the whole list at once.
-
-Expanding is not a single sweep, and cannot be: the app fetches each file's patch lazily as it scrolls into view, and a file whose patch has not arrived has a disabled header that cannot be expanded at all. So one press expands everything already loaded and **stays armed** - files keep expanding as you scroll and their patches land. Press again to collapse everything and turn that off. Collapsing runs bottom-up on purpose: the app scrolls each file into view as it closes, so top-down would leave you staring at the bottom of the diff.
-
-It never fights you. A file you collapse by hand stays collapsed, even while the button is armed. Changing the diff scope disarms it, so a large branch diff is never dumped open unasked, and closing the last open file by hand disarms it too - the button then reads Expand again rather than promising a Collapse it no longer offers. Closing the panel, or expanding it to fullscreen, tears the old instance down instead of leaving it running invisibly.
-
-The button is a clone of its neighbouring control, so it inherits the panel's hover, focus ring and theme rather than approximating them, and its caret glyph comes from Anthropic's own icon font - but only after two checks agree it will actually draw: the font is loaded, and a canvas ink probe finds ink at **both** codepoints it can paint (the expand caret and the collapse caret). That font renders nothing at all for an unmapped codepoint, so a codepoint that shifts in a future release would silently produce an invisible button - and when the font is missing altogether, the browser substitutes one whose tofu box the ink check alone would read as success. Either check failing leaves the hand-drawn SVG in place.
-
-Part of the existing **Diff view modes** switch (Settings → Extra → Features), still off by default. A new headless-Chromium suite, `scripts/test-diff-views-expand-dom.mjs`, covers placement, the ARIA contract, both press directions, sticky expansion, auto-disarm, and every teardown path (panel unmount, fullscreen, feature switch); a missing icon font is reported as an explicit SKIP rather than quietly shrinking the run. Also fixed a build trap found on the way: `patches/Makefile` had no `staticRead` dependency line for `add_feature_diff_views`, so editing its JS did not rebuild the patch binary - and `scripts/validate-patches.sh` piped this suite through `sed`, so it reported PASS on the pipeline's exit status no matter how many assertions failed.
-
-## 2026-07-31
-
-### Settings → Extra → Deployment: a 1P/3P switch, and the whole 3P config as toggles
-
-Third-party inference was a one-way door. Turning it on took a root shell to place `/etc/claude-desktop/managed-settings.json`, and getting back to a personal claude.ai login took knowing that deleting that file is *not* enough - the app keeps its own stored 3P config and boots from that, so the only way out was a launcher flag or hand-editing JSON in a directory most people never look at.
-
-The new **Deployment** panel makes both directions a button. It has:
-
-- **The mode switch.** `1P` / `3P`, showing what the running session is, what the next start will use, and which config source decided that. It writes upstream's own `deploymentMode` key, which overrides a stored 3P configuration - so a machine that got stuck in 3P is one click and one restart from personal again, with nothing deleted.
-- **The configuration, as a form.** Every key of the managed-settings schema this build accepts, grouped the way upstream's own schema groups it: provider and credentials, model list, surfaces (Chat/Cowork/Code), workspace and egress allowlists, disabled built-in tools, connectors and extensions, plugins, telemetry, update policy, usage limits, branding, bootstrap. Booleans are switches, enums are selects, lists are one-per-line, and a key you never touch stays absent from the file so Claude Desktop keeps its own default. Provider-specific fields stay hidden until that provider is selected.
-- **The stored configurations.** The panel edits the *applied* entry of the same store upstream's 3P Setup wizard uses, so the two show each other's values. Its *Active configuration* picker switches between them - and picking **None** boots 1P while leaving every file on disk.
-- **A raw JSON editor** for anything the form does not cover, which rejects a key this build does not know instead of writing a file the app would then ignore whole.
-- **Undo for everything.** Each set key has a `clear` chip, the mode switch has one that forgets the saved choice so the stored configuration decides again, and the section heading has a `clear all` (two clicks, because it throws work away) for a handful of toggles flipped by mistake. Clearing never deletes a configuration file - the entry stays listed and can be filled in again.
-
-Everything is written to your own profile directory (`~/.config/Claude-3p/`, per profile), `0600` in a `0700` dir, using only files upstream already reads - so no `sudo`, and no patch to the app's startup path. Stored credentials are write-only: the panel can replace one but never displays it, and it will not hand one to the claude.ai page it renders in. Two keys stay read-only there and remain yours to deploy through the policy file: `disableDeploymentModeChooser`, which is precisely what locks a machine into 3P, and `managedMcpServers`, whose entries can start a process. A valid `/etc/claude-desktop/managed-settings.json` still wins over all of it; the panel says so and turns read-only.
-
-Also in this release: **`betaFeaturesEnabled` no longer exists upstream.** If your policy file still carries it, remove it - one unrecognized key makes Claude Desktop discard the entire managed file. [docs/third-party-inference.md](docs/third-party-inference.md) documents the new route and this trap.
-
-### Themes: Built-in and Community are one "Common" section
-
-Whether a palette ships as a built-in or came from the community collection is a packaging detail, not something to pick a theme by - so the two sections are now one **Common** list, alphabetically, in both the Settings panel and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker. Your themes and Gaming are unchanged.
-
-### The Extra panels link the config file behind them
-
-Each panel ends in the file it is really about, as a link: click the path to open it in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. Themes names the file a click there actually persists to, which depends on which of `claude-desktop-extra.jsonc` / `.json` exists; Features links the `.jsonc` - the file you edit by hand, and the one whose flag ids win over the panel. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
 ### The Code tab's diff panel gets view modes - and stops comparing against the wrong branch
 
 The diff panel had one view: everything between the remote default branch and your working tree. Committed work and uncommitted edits arrived in one undifferentiated list, so "what have I actually committed on this branch" and "what did Claude just change" were questions the panel could not answer.
@@ -82,6 +45,48 @@ Off is a genuine retreat, not a hidden control: no dropdown, a byte-for-byte pas
 The modes arm per repository, once a CLI session has been observed in it, so turning the switch on mid-session leaves the dropdown reading **Working tree** until the next message lands. That wait is deliberate: the file list and the content of each file in it are gated on the same fact, so the panel can never show one from the branch and the other from the working tree.
 
 The setting is `diffViewModes` in `claude-desktop-extra.json`; "off" is the absence of the key, so only an explicit opt-in ever writes anything. Set it by hand in the `.jsonc` and the switch shows itself as locked rather than silently disagreeing with the file.
+
+### Expand or collapse every file in the Code tab's diff panel
+
+The diff panel opens one file at a time. A new button in the panel's own header row, between the scope dropdown and the ⤢/✕ controls, does the whole list at once.
+
+Expanding is not a single sweep, and cannot be: the app fetches each file's patch lazily as it scrolls into view, and a file whose patch has not arrived has a disabled header that cannot be expanded at all. So one press expands everything already loaded and **stays armed** - files keep expanding as you scroll and their patches land. Press again to collapse everything and turn that off. Collapsing runs bottom-up on purpose: the app scrolls each file into view as it closes, so top-down would leave you staring at the bottom of the diff.
+
+It never fights you. A file you collapse by hand stays collapsed, even while the button is armed. Changing the diff scope disarms it, so a large branch diff is never dumped open unasked, and closing the last open file by hand disarms it too - the button then reads Expand again rather than promising a Collapse it no longer offers. Closing the panel, or expanding it to fullscreen, tears the old instance down instead of leaving it running invisibly.
+
+The button is a clone of its neighbouring control, so it inherits the panel's hover, focus ring and theme rather than approximating them, and its caret glyph comes from Anthropic's own icon font - but only after two checks agree it will actually draw: the font is loaded, and a canvas ink probe finds ink at **both** codepoints it can paint (the expand caret and the collapse caret). That font renders nothing at all for an unmapped codepoint, so a codepoint that shifts in a future release would silently produce an invisible button - and when the font is missing altogether, the browser substitutes one whose tofu box the ink check alone would read as success. Either check failing leaves the hand-drawn SVG in place.
+
+Part of the existing **Diff view modes** switch (Settings → Extra → Features), still off by default. A new headless-Chromium suite, `scripts/test-diff-views-expand-dom.mjs`, covers placement, the ARIA contract, both press directions, sticky expansion, auto-disarm, and every teardown path (panel unmount, fullscreen, feature switch); a missing icon font is reported as an explicit SKIP rather than quietly shrinking the run. Also fixed a build trap found on the way: `patches/Makefile` had no `staticRead` dependency line for `add_feature_diff_views`, so editing its JS did not rebuild the patch binary - and `scripts/validate-patches.sh` piped this suite through `sed`, so it reported PASS on the pipeline's exit status no matter how many assertions failed.
+
+Merged with one hardening on top: the dropdown's status query now refuses to run git in a directory nothing in the main process has vouched for - only the panel's own fetches and the session's CLI spawns make a directory queryable, so the remote page cannot use the status call to probe arbitrary paths.
+
+Contributed by [@dels07](https://github.com/dels07) ([#211](https://github.com/patrickjaja/claude-desktop-extra/pull/211)) - thanks!
+
+## 2026-07-31
+
+### Settings → Extra → Deployment: a 1P/3P switch, and the whole 3P config as toggles
+
+Third-party inference was a one-way door. Turning it on took a root shell to place `/etc/claude-desktop/managed-settings.json`, and getting back to a personal claude.ai login took knowing that deleting that file is *not* enough - the app keeps its own stored 3P config and boots from that, so the only way out was a launcher flag or hand-editing JSON in a directory most people never look at.
+
+The new **Deployment** panel makes both directions a button. It has:
+
+- **The mode switch.** `1P` / `3P`, showing what the running session is, what the next start will use, and which config source decided that. It writes upstream's own `deploymentMode` key, which overrides a stored 3P configuration - so a machine that got stuck in 3P is one click and one restart from personal again, with nothing deleted.
+- **The configuration, as a form.** Every key of the managed-settings schema this build accepts, grouped the way upstream's own schema groups it: provider and credentials, model list, surfaces (Chat/Cowork/Code), workspace and egress allowlists, disabled built-in tools, connectors and extensions, plugins, telemetry, update policy, usage limits, branding, bootstrap. Booleans are switches, enums are selects, lists are one-per-line, and a key you never touch stays absent from the file so Claude Desktop keeps its own default. Provider-specific fields stay hidden until that provider is selected.
+- **The stored configurations.** The panel edits the *applied* entry of the same store upstream's 3P Setup wizard uses, so the two show each other's values. Its *Active configuration* picker switches between them - and picking **None** boots 1P while leaving every file on disk.
+- **A raw JSON editor** for anything the form does not cover, which rejects a key this build does not know instead of writing a file the app would then ignore whole.
+- **Undo for everything.** Each set key has a `clear` chip, the mode switch has one that forgets the saved choice so the stored configuration decides again, and the section heading has a `clear all` (two clicks, because it throws work away) for a handful of toggles flipped by mistake. Clearing never deletes a configuration file - the entry stays listed and can be filled in again.
+
+Everything is written to your own profile directory (`~/.config/Claude-3p/`, per profile), `0600` in a `0700` dir, using only files upstream already reads - so no `sudo`, and no patch to the app's startup path. Stored credentials are write-only: the panel can replace one but never displays it, and it will not hand one to the claude.ai page it renders in. Two keys stay read-only there and remain yours to deploy through the policy file: `disableDeploymentModeChooser`, which is precisely what locks a machine into 3P, and `managedMcpServers`, whose entries can start a process. A valid `/etc/claude-desktop/managed-settings.json` still wins over all of it; the panel says so and turns read-only.
+
+Also in this release: **`betaFeaturesEnabled` no longer exists upstream.** If your policy file still carries it, remove it - one unrecognized key makes Claude Desktop discard the entire managed file. [docs/third-party-inference.md](docs/third-party-inference.md) documents the new route and this trap.
+
+### Themes: Built-in and Community are one "Common" section
+
+Whether a palette ships as a built-in or came from the community collection is a packaging detail, not something to pick a theme by - so the two sections are now one **Common** list, alphabetically, in both the Settings panel and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker. Your themes and Gaming are unchanged.
+
+### The Extra panels link the config file behind them
+
+Each panel ends in the file it is really about, as a link: click the path to open it in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. Themes names the file a click there actually persists to, which depends on which of `claude-desktop-extra.jsonc` / `.json` exists; Features links the `.jsonc` - the file you edit by hand, and the one whose flag ids win over the panel. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
 
 ## 2026-07-30
 

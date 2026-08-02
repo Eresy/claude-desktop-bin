@@ -2293,6 +2293,18 @@
     // the dropdown from ever activating.
     var cwd = S.diffCwd || S.cwd;
     if (!cwd) return stateFields({ available: false, isGitRepo: false, baseRef: null });
+    // S.diffCwd is renderer-influenced: noteDiffCwd records it BEFORE the stock
+    // handler gets a say, so upstream's requireTrustedCwd rejection never
+    // filters it. A cwd nothing on the main side has vouched for must not
+    // reach git here - not even the is-a-work-tree probe, which would hand
+    // remote code an "is this absolute path a git repo" oracle plus that
+    // repo's base branch name. Vouched means upstream's own gate passed
+    // (markTrustedCwd via a non-null stock result) or our spawn hook observed
+    // the session's CLI there - the same bar the substitution path uses.
+    if (!isTrustedCwd(cwd) && !isObservedCwd(cwd)) {
+      logOnce("state-unvouched", cwd, "state: refusing git probe for unvouched cwd " + cwd);
+      return stateFields({ available: false, isGitRepo: false, baseRef: null });
+    }
     return new Promise(function (resolve) {
       // Shares the per-cwd work-tree cache with the spawn gate, so the probe
       // runs once per directory and a "not a git repo" verdict learned here is
