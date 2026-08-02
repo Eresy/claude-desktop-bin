@@ -2,6 +2,20 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-01
+
+### Expand or collapse every file in the Code tab's diff panel
+
+The diff panel opens one file at a time. A new button in the panel's own header row, between the scope dropdown and the ⤢/✕ controls, does the whole list at once.
+
+Expanding is not a single sweep, and cannot be: the app fetches each file's patch lazily as it scrolls into view, and a file whose patch has not arrived has a disabled header that cannot be expanded at all. So one press expands everything already loaded and **stays armed** - files keep expanding as you scroll and their patches land. Press again to collapse everything and turn that off. Collapsing runs bottom-up on purpose: the app scrolls each file into view as it closes, so top-down would leave you staring at the bottom of the diff.
+
+It never fights you. A file you collapse by hand stays collapsed, even while the button is armed. Changing the diff scope disarms it, so a large branch diff is never dumped open unasked, and closing the last open file by hand disarms it too - the button then reads Expand again rather than promising a Collapse it no longer offers. Closing the panel, or expanding it to fullscreen, tears the old instance down instead of leaving it running invisibly.
+
+The button is a clone of its neighbouring control, so it inherits the panel's hover, focus ring and theme rather than approximating them, and its caret glyph comes from Anthropic's own icon font - but only after two checks agree it will actually draw: the font is loaded, and a canvas ink probe finds ink at **both** codepoints it can paint (the expand caret and the collapse caret). That font renders nothing at all for an unmapped codepoint, so a codepoint that shifts in a future release would silently produce an invisible button - and when the font is missing altogether, the browser substitutes one whose tofu box the ink check alone would read as success. Either check failing leaves the hand-drawn SVG in place.
+
+Part of the existing **Diff view modes** switch (Settings → Extra → Features), still off by default. A new headless-Chromium suite, `scripts/test-diff-views-expand-dom.mjs`, covers placement, the ARIA contract, both press directions, sticky expansion, auto-disarm, and every teardown path (panel unmount, fullscreen, feature switch); a missing icon font is reported as an explicit SKIP rather than quietly shrinking the run. Also fixed a build trap found on the way: `patches/Makefile` had no `staticRead` dependency line for `add_feature_diff_views`, so editing its JS did not rebuild the patch binary - and `scripts/validate-patches.sh` piped this suite through `sed`, so it reported PASS on the pipeline's exit status no matter how many assertions failed.
+
 ## 2026-07-31
 
 ### Settings → Extra → Deployment: a 1P/3P switch, and the whole 3P config as toggles
@@ -27,6 +41,47 @@ Whether a palette ships as a built-in or came from the community collection is a
 ### The Extra panels link the config file behind them
 
 Each panel ends in the file it is really about, as a link: click the path to open it in your editor, or the **folder** button to show it in your file manager. Files that do not exist yet open their containing folder rather than failing. Themes names the file a click there actually persists to, which depends on which of `claude-desktop-extra.jsonc` / `.json` exists; Features links the `.jsonc` - the file you edit by hand, and the one whose flag ids win over the panel. The page asks for a location by name and never sends a path, so it cannot ask the desktop to open anything but our own files.
+### The Code tab's diff panel gets view modes - and stops comparing against the wrong branch
+
+The diff panel had one view: everything between the remote default branch and your working tree. Committed work and uncommitted edits arrived in one undifferentiated list, so "what have I actually committed on this branch" and "what did Claude just change" were questions the panel could not answer.
+
+A dropdown in the panel's own header row now switches between three scopes:
+
+- **Working tree** - what the panel always showed.
+- **Branch changes** - committed work only, from the fork point to `HEAD`.
+- **Latest turn** - what changed during the most recent conversation turn, untracked files included.
+
+Nothing is re-rendered. Rather than draw a second diff view, this rewrites the arguments of the app's own git IPC and lets the stock renderer draw every mode - so syntax highlighting, virtualized scrolling, theming and line comments work in Branch changes exactly as they do in Working tree. Refs are handed over as full SHAs, because the app resolves a name by trying `origin/<ref>` first and would otherwise turn `HEAD` into `origin/HEAD` and diff a commit against itself.
+
+### The diff panel now finds the branch you actually branched from
+
+Upstream takes the base branch from the remote default (`origin/HEAD`) and nothing else. In a repository whose default is `develop`, a branch cut from `master` is measured from whatever old commit `develop` and `master` last shared, so the panel lists files nobody on the branch has touched - and the breadcrumb names a branch the diff was never computed against.
+
+Base detection now scores candidates - `origin/HEAD`, `main`, `master`, `develop`, `trunk` and the branch's own upstream - by how few commits separate each candidate's merge-base from `HEAD`, and takes the closest fork point. Nothing hardcodes a branch-naming scheme, and a repository whose default really is the closest fork point is left exactly as upstream had it. The breadcrumb is corrected with the comparison, so the label always names the branch the diff was computed against.
+
+To pin a base by hand:
+
+```bash
+git config branch.<branch-name>.cdbBaseBranch master
+```
+
+Everything degrades to the stock panel rather than breaking, and each refusal is logged once with its reason. Git runs on fixed argument vectors in the directory observed on the session's own CLI spawn, never one supplied by the page, and every ref and path is checked before it reaches a command. A diff or file over 2 MiB is refused rather than served truncated: collection is killed mid-stream, so a partial patch presented as a complete one would be a wrong answer that looks like a right one.
+
+### Latest turn keeps its snapshot per repository, and says so when it has none
+
+Latest turn compares two `git write-tree` snapshots taken from a temporary index at each turn boundary - no commits, no stashes, no refs, and untracked files included. Snapshots are kept per repository, because the app spawns its CLI for other directories (plain `$HOME` among them) every few seconds.
+
+When a repository has no turn recorded yet, the **Latest turn** entry is disabled and explains itself on hover - the menu does not offer a scope that would show you something else. Sending one message arms it.
+
+### The diff view modes are opt-in, behind their own switch
+
+Everything above is **off by default**. A **Source control** switch at the top of Settings -> Extra -> **Features** turns it on, and leaving it alone is the supported way to use this build: the feature reshapes a first-party surface - it rewrites the arguments of Anthropic's own git IPC and corrects the base branch the stock panel compares against - and that is worth asking for rather than assuming. A fresh install therefore behaves exactly like the official one.
+
+Off is a genuine retreat, not a hidden control: no dropdown, a byte-for-byte pass-through, no base-branch correction (the breadcrumb names upstream's own base again), no turn snapshots, and every remembered mode reset to Working tree. Both directions apply live, with no restart.
+
+The modes arm per repository, once a CLI session has been observed in it, so turning the switch on mid-session leaves the dropdown reading **Working tree** until the next message lands. That wait is deliberate: the file list and the content of each file in it are gated on the same fact, so the panel can never show one from the branch and the other from the working tree.
+
+The setting is `diffViewModes` in `claude-desktop-extra.json`; "off" is the absence of the key, so only an explicit opt-in ever writes anything. Set it by hand in the `.jsonc` and the switch shows itself as locked rather than silently disagreeing with the file.
 
 ## 2026-07-30
 

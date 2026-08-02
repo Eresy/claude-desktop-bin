@@ -35,6 +35,17 @@ fix_cowork_font: ../js/fix_cowork_font.js
 
 fix_epitaxy_autoscroll: ../js/fix_epitaxy_autoscroll.js
 
+# Diff view modes: the main-process half embeds the injected page script AND the
+# expand/collapse-all module, both via staticRead, so a change to any of them has
+# to rebuild the binary. (This line was missing until 2026-08-01 - JS-only edits
+# silently produced a stale binary.)
+add_feature_diff_views: \
+  ../js/diff_views_main.js \
+  ../js/diff_views_page.js \
+  ../js/diff_views_expand.js
+
+add_feature_diff_views_bridge: ../js/diff_views_bridge.js
+
 # Theme patch embeds the spinner-reshape installer (swaps the loading-star SVG
 # for the active theme's custom shape) and the bundled community + gaming palette
 # collections via staticRead.

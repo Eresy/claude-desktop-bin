@@ -204,6 +204,42 @@ else
 fi
 echo ""
 
+# The expand/collapse-all button drives REMOTE epitaxy markup, so applying
+# cleanly says nothing about it landing in the right place or respecting
+# upstream's aria-expanded contract. Same headless-Chromium approach, no npm.
+echo "-----------------------------------"
+echo "Diff views expand/collapse-all DOM suite (headless Chromium)"
+if command -v node >/dev/null 2>&1 && {
+        command -v chromium >/dev/null 2>&1 ||
+        command -v chromium-browser >/dev/null 2>&1 ||
+        command -v google-chrome-stable >/dev/null 2>&1 ||
+        command -v google-chrome >/dev/null 2>&1; }; then
+    TOTAL=$((TOTAL + 1))
+    # The NODE exit status decides, never the pipeline's. `node ... | sed` reports
+    # sed's status, which is always 0, so this block used to print PASS even when
+    # every assertion in the suite failed. Capture, print indented, then test the
+    # SAVED status.
+    DV_LOG="$(mktemp)"
+    if node "$(dirname "$0")/test-diff-views-expand-dom.mjs" >"$DV_LOG" 2>&1; then
+        DV_RC=0
+    else
+        DV_RC=$?
+    fi
+    sed 's/^/  /' "$DV_LOG"
+    rm -f "$DV_LOG"
+    if [ "$DV_RC" -eq 0 ]; then
+        echo "  Status: PASS"
+        PASSED=$((PASSED + 1))
+    else
+        echo "  Status: FAIL"
+        FAILED=$((FAILED + 1))
+    fi
+else
+    echo "  Status: SKIP (no node and/or chromium on this machine)"
+    SKIPPED=$((SKIPPED + 1))
+fi
+echo ""
+
 # A clean patch run says nothing about the theme engine's LIVE behaviour: whether a theme
 # switch re-themes the spinner in every open window (it used to need a restart), whether
 # a revert restores Claude's own glyph, or whether the picker groups gaming palettes by
