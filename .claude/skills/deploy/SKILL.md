@@ -20,7 +20,7 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
 ## Versioning semantics (format: `{upstream}-{pkgrel}`)
 - **New upstream version** (`.upstream-version` was bumped by `/update`): pkgrel resets to **1** automatically. This is the plain non-force run.
 - **Re-release at the same upstream version**: pkgrel auto-increments (CI counts existing releases). This needs `force_rebuild=true`. It does not matter whether the change was a patch (new patched payload) or packaging-only (launcher, .desktop, packaging scripts) - **both simply bump pkgrel**; the *kind* of change belongs in the CHANGELOG entry and the release notes, not in the version.
-- pkgrel is never chosen by hand and never committed anywhere.
+- pkgrel is never chosen by hand. CI computes it (counts existing releases) and, after publishing, stamps it into `packaging/nix/package.nix` alongside `version` and the tarball `hash` - Nix consumers fetch from the release's own immutable tag (`v<upstream>` for pkgrel 1, `v<upstream>-<pkgrel>` otherwise; assets are never overwritten, issue #214). The pkgrel/hash literals in package.nix are CI-managed; never edit them manually.
 
 ## Steps
 1. **Resolve the last release tag** (from the Last release context above; `v<upstream>` or `v<upstream>-<pkgrel>`).
