@@ -4,6 +4,14 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 ## 2026-08-03
 
+### Launching from a panel or menu no longer freezes startx/xinit desktops
+
+On a session started with `startx`/`xinit` instead of a display manager, launching Claude Desktop from a panel button or the applications menu suspended the entire desktop: the window mapped blank, nothing redrew, only the pointer and VT switching kept working. The desktop on such a session runs on a VT and shares one process group, and the app's Claude Code integration probes the user environment with an interactive login shell (`bash -l -i -c '... env'`). Bash's job-control init finds that shell in a background process group of its controlling terminal and raises `SIGTTIN` against the whole group - which on a startx session is xfce4-session, the window manager, the panel and everything else. Terminal launches were always fine, because there the launcher is the foreground job.
+
+The launcher now detaches via `setsid` before exec, but only when it is genuinely a background job on a controlling terminal (`tpgid` exists and differs from `pgid`). Display-manager sessions (`tpgid == -1`) and foreground terminal launches (`tpgid == pgid`) are untouched - terminal users keep live output and Ctrl-C. On a detached launch the app's stdout/stderr now lands in `~/.cache/claude-desktop/stdout.log` (2 MiB rotation) instead of an unreadable VT, which also makes issue reports from menu-launched sessions possible. `CLAUDE_KEEP_TTY=1` restores the old behaviour.
+
+Root-caused (down to the `wchan do_signal_stop` capture) and fixed by Marco Bucchiarone ([@Eresy](https://github.com/Eresy)) in [#213](https://github.com/patrickjaja/claude-desktop-extra/pull/213) - thanks!
+
 ### Computer Use executor: remaining probe/timing exec calls converted to argument arrays
 
 The residual shell-string `execSync` calls in `js/cu_linux_executor.js` now run through `execFileSync` with argument arrays: the `systemd-detect-virt` VM probe, the `which`-based command cache, the `pgrep -x ydotoold` daemon check, and the ydotool hold-key `sleep`. None of these carried attacker-controlled input (the model-supplied paths were already converted 2026-07-13), so this is defensive consistency, not a vulnerability fix. The now-unused `_exec`/`_execBuf` shell helpers are gone.
