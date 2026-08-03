@@ -2,6 +2,16 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-03
+
+### Computer Use executor: remaining probe/timing exec calls converted to argument arrays
+
+The residual shell-string `execSync` calls in `js/cu_linux_executor.js` now run through `execFileSync` with argument arrays: the `systemd-detect-virt` VM probe, the `which`-based command cache, the `pgrep -x ydotoold` daemon check, and the ydotool hold-key `sleep`. None of these carried attacker-controlled input (the model-supplied paths were already converted 2026-07-13), so this is defensive consistency, not a vulnerability fix. The now-unused `_exec`/`_execBuf` shell helpers are gone.
+
+Contributed by [@anupamme](https://github.com/anupamme) ([#212](https://github.com/patrickjaja/claude-desktop-extra/pull/212)) - thanks!
+
+Post-merge follow-up: the PR also whitespace-split `COWORK_SCREENSHOT_CMD` into an `execFileSync` argument array, which would have broken quoted arguments and pipes in user templates (e.g. `grim -g "{X},{Y} {W}x{H}" {FILE}`). That variable is a user-supplied command template from the user's own environment - shell evaluation is its documented contract and carries no injection surface - so the follow-up commit restores it verbatim.
+
 ## 2026-08-01
 
 ### The Code tab's diff panel gets view modes - and stops comparing against the wrong branch

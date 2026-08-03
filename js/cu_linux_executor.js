@@ -220,8 +220,8 @@ async function _captureRegion(x,y,w,h,sf){
     // Intentionally shell-evaluated: this is a user-supplied command template
     // from the user's own environment (pipes/redirects are part of the
     // contract). Only {FILE}/{X}/{Y}/{W}/{H} are substituted, all local values.
-    try{var _scParts=process.env.COWORK_SCREENSHOT_CMD.replace(/\{FILE\}/g,tmp).replace(/\{X\}/g,x).replace(/\{Y\}/g,y).replace(/\{W\}/g,w).replace(/\{H\}/g,h).split(/\s+/);
-    _cp.execFileSync(_scParts[0],_scParts.slice(1),{timeout:15000});globalThis.__cdbDiag("[claude-cu] screenshot: captured via COWORK_SCREENSHOT_CMD");return _nativePng(_readClean(tmp))}catch(e){globalThis.__cdbDiag("[claude-cu] COWORK_SCREENSHOT_CMD failed: "+e.message)}
+    try{var cmd=process.env.COWORK_SCREENSHOT_CMD.replace(/\{FILE\}/g,tmp).replace(/\{X\}/g,x).replace(/\{Y\}/g,y).replace(/\{W\}/g,w).replace(/\{H\}/g,h);
+    _cp.execSync(cmd,{timeout:15000});globalThis.__cdbDiag("[claude-cu] screenshot: captured via COWORK_SCREENSHOT_CMD");return _nativePng(_readClean(tmp))}catch(e){globalThis.__cdbDiag("[claude-cu] COWORK_SCREENSHOT_CMD failed: "+e.message)}
   }
   // Covered Wayland sessions (wlroots / GNOME): the bundled bridge is the SOLE
   // screenshot backend (no third-party fallback, per design). Like x11-bridge,
