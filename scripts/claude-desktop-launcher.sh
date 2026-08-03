@@ -23,6 +23,10 @@
 #                            - Skip the systemd --user --scope wrapper (for
 #                              sandboxes without access to the systemd private
 #                              socket; portal app identity may not resolve)
+#   CLAUDE_KEEP_TTY=1        - Do not detach from the controlling terminal even
+#                              when launched as a background job on one. Only
+#                              affects startx/xinit-style sessions; see the
+#                              tty-detach block in the Launch section
 #   CLAUDE_NATIVE_TITLEBAR=1 - Restore the native titlebar on Linux
 #                              (frame:true + titleBarStyle:"default"). Default
 #                              is the integrated titlebar with overlay. Also
@@ -65,21 +69,26 @@ APP_ID='claude'
 LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/claude-desktop"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/launcher.log"
+# Only written when we detach from a controlling terminal (see the tty-detach
+# block in the Launch section). Terminal launches keep the caller's stdio.
+STDIO_LOG="$LOG_DIR/stdout.log"
 
-# Rotate launcher.log if it grows too large. log() only ever appends (one or
+# Rotate the logs if they grow too large. log() only ever appends (one or
 # more lines per launch), so without a cap the file grows unboundedly over
-# weeks of use. We keep a single rotated backup (launcher.log.old). This block
+# weeks of use; stdout.log collects the app's own (far chattier) output on
+# detached launches. We keep a single rotated backup each (.old). This block
 # runs on every startup and must never abort the launcher itself, so every
 # step is guarded: a missing file or an odd stat must not stop Claude from
 # opening. See issue #132 (the unbounded-growth half; the O(n^2) awk hang it
 # also describes belongs to a different project and does not exist here).
 _LOG_MAX_BYTES=$((2 * 1024 * 1024))  # 2 MiB
-if [[ -f $LOG_FILE ]]; then
-    _log_size=$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)
+for _lf in "$LOG_FILE" "$STDIO_LOG"; do
+    [[ -f $_lf ]] || continue
+    _log_size=$(stat -c %s "$_lf" 2>/dev/null || echo 0)
     if [[ $_log_size =~ ^[0-9]+$ ]] && (( _log_size > _LOG_MAX_BYTES )); then
-        mv -f "$LOG_FILE" "$LOG_FILE.old" 2>/dev/null || true
+        mv -f "$_lf" "$_lf.old" 2>/dev/null || true
     fi
-fi
+done
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE"; }
 
@@ -1320,6 +1329,13 @@ Environment variables:
                             Skip the systemd --user --scope wrapper (for
                             sandboxes without access to the systemd private
                             socket; portal app identity may not resolve).
+  CLAUDE_KEEP_TTY=1         Keep the controlling terminal even when launched
+                            as a background job on one. Default is to setsid
+                            away from it, because the app's env extraction
+                            spawns an interactive shell that would otherwise
+                            SIGTTIN the whole session process group (freezes
+                            startx/xinit desktops). Terminal launches are
+                            unaffected either way.
   CLAUDE_APPIMAGE_PATH=PATH Set by AppRun when running as AppImage. Used for
                             protocol handler registration. Do not set manually
                             unless running from --appimage-extract.
@@ -1814,15 +1830,64 @@ for _d in /usr/local/bin /usr/bin /bin /usr/local/sbin /usr/sbin /sbin; do
 done
 export PATH="$_claude_path"
 
+# Detach from the controlling terminal when we are a BACKGROUND job on one.
+#
+# Sessions started with startx/xinit rather than a display manager run the
+# whole desktop on a VT: xfce4-session and everything it spawns inherit
+# ctty=/dev/ttyN and the session's process group, which is not the terminal's
+# foreground group (that stays with the startx shell).
+#
+# The app's Claude Code integration harvests the user environment by spawning
+# an INTERACTIVE login shell (bash -l -i -c '... env'). Bash's job-control
+# init sees it is not in the foreground process group of its controlling
+# terminal, and raises SIGTTIN against its whole PROCESS GROUP - the group it
+# inherited from us. On a startx session that group is the entire desktop, so
+# xfce4-session, xfwm4, xfce4-panel, xfdesktop and the rest all enter state T
+# and the desktop appears frozen. Xorg is a child of xinit in a different
+# group and keeps running, which is why the pointer still moves and VT
+# switching still works while nothing else responds; recovery needs an
+# external SIGCONT or killing X. Observed on XFCE + startx: main process
+# blocked 17-55s per launch, then "[CCD] Shell environment extraction timed
+# out". Launching the same binary from a terminal was always fine.
+#
+# setsid puts us in a new session with NO controlling terminal and a fresh,
+# ORPHANED process group; POSIX requires stop signals sent to an orphaned
+# process group to be discarded, so the spawned shell just turns job control
+# off and returns. Redirecting the inherited tty fds away as well keeps
+# isatty(stderr) false, so bash does not attempt job control at all.
+#
+# Deliberately a no-op for foreground launches: a terminal launch has
+# tpgid == pgid and keeps its stdio, live output and Ctrl-C untouched.
+# CLAUDE_KEEP_TTY=1 forces the old behaviour.
+_needs_tty_detach() {
+    local _pgid _tpgid
+    _pgid=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+    _tpgid=$(ps -o tpgid= -p $$ 2>/dev/null | tr -d ' ')
+    # tpgid is -1 with no controlling terminal, and equals pgid when we are the
+    # foreground job. Neither case can raise SIGTTIN, so leave them alone.
+    [[ -n "$_pgid" && -n "$_tpgid" && "$_tpgid" != '-1' && "$_tpgid" != "$_pgid" ]]
+}
+
+_setsid=()
+if [[ "${CLAUDE_KEEP_TTY:-}" != '1' ]] && _needs_tty_detach; then
+    if command -v setsid &>/dev/null; then
+        _setsid=(setsid)
+        log "background job on a controlling terminal: detaching via setsid, stdio -> $STDIO_LOG"
+        exec </dev/null >>"$STDIO_LOG" 2>&1
+    else
+        log 'WARNING: background job on a controlling terminal but setsid is missing (util-linux); the app env extraction can SIGTTIN the whole session process group'
+    fi
+fi
+
 if [[ "${CLAUDE_DISABLE_SYSTEMD_SCOPE:-}" != '1' ]] \
     && command -v systemd-run &>/dev/null \
     && [[ -n "${XDG_RUNTIME_DIR:-}" ]] \
     && [[ -S "${XDG_RUNTIME_DIR}/systemd/private" ]]; then
-    exec systemd-run --user --scope --quiet \
+    exec "${_setsid[@]}" systemd-run --user --scope --quiet \
         --unit="app-${DESKTOP_ID}-$$.scope" \
         --description='Claude Desktop' \
         --setenv="PATH=${_claude_path}" \
         -- "$ELECTRON_BIN" "${ELECTRON_ARGS[@]}" "$@"
 fi
 log 'systemd user scope unavailable (binary missing, socket unreachable, or CLAUDE_DISABLE_SYSTEMD_SCOPE=1): launching without scope; xdg-desktop-portal may fail to identify the app'
-exec "$ELECTRON_BIN" "${ELECTRON_ARGS[@]}" "$@"
+exec "${_setsid[@]}" "$ELECTRON_BIN" "${ELECTRON_ARGS[@]}" "$@"
