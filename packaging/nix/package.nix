@@ -47,8 +47,14 @@
 
 let
   # Updated automatically by CI (build-and-release.yml) on each release.
-  version = "1.24012.9";
-  hash = "sha256-usk37SSOMpH5EpCmdPfJRLQ0EC+J3WXjF3Mtg/WU/iI="; # TODO: CI updates this hash after building the release tarball
+  version = "1.24012.9"; # pkgver: always the upstream Claude Desktop version
+  pkgrel = "14"; # Arch-style release counter: bumped on re-releases of the same upstream version, reset to 1 on version bumps
+  hash = "sha256-usk37SSOMpH5EpCmdPfJRLQ0EC+J3WXjF3Mtg/WU/iI=";
+  # Every release publishes under its own tag (v<version> for pkgrel 1,
+  # v<version>-<pkgrel> for re-releases) and its assets are never overwritten
+  # afterwards, so this URL is immutable and a pinned flake.lock keeps fetching
+  # byte-identical content forever (issue #214).
+  releaseTag = if pkgrel == "1" then "v${version}" else "v${version}-${pkgrel}";
   # The release tarball ships the official Claude Desktop tree verbatim under
   # claude-desktop/ (Electron runtime + our patched resources/app.asar + CU
   # bridges), extracted from Anthropic's Linux .deb. On NixOS, however, that
@@ -67,7 +73,7 @@ stdenvNoCC.mkDerivation {
   inherit version;
 
   src = fetchurl {
-    url = "https://github.com/patrickjaja/claude-desktop-extra/releases/download/v${version}/claude-desktop-${version}-linux.tar.gz";
+    url = "https://github.com/patrickjaja/claude-desktop-extra/releases/download/${releaseTag}/claude-desktop-${version}-linux.tar.gz";
     inherit hash;
   };
 

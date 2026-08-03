@@ -12,6 +12,24 @@ The launcher now detaches via `setsid` before exec, but only when it is genuinel
 
 Root-caused (down to the `wchan do_signal_stop` capture) and fixed by Marco Bucchiarone ([@Eresy](https://github.com/Eresy)) in [#213](https://github.com/patrickjaja/claude-desktop-extra/pull/213) - thanks!
 
+### Release pipeline: an AUR outage can no longer half-deploy a release
+
+The AUR push runs last in the release job, so when the AUR went down for maintenance (run 30741060085) the job died after the GitHub Release, pacman repo assets and README versions were already live - but before the Pages deploy jobs ran. Result: apt/dnf repos, badges and the AUR stayed one release behind while everything else advanced.
+
+The release job now probes the AUR over SSH before publishing anything. If the AUR is unreachable, the run stops while every channel is still consistently on the previous version, and can simply be re-run once the AUR is back. The clone and push at the end additionally retry three times to ride out short blips in the window after the preflight.
+
+### NixOS: pinned flakes no longer break - release tarballs are now immutable
+
+`nixos-rebuild` against a pinned `flake.lock` could fail with a fixed-output hash mismatch through no fault of the user ([#214](https://github.com/patrickjaja/claude-desktop-extra/issues/214)). `package.nix` fetched the tarball from the version-only URL (`v1.24012.9/...`), and every re-release of the same upstream version overwrote that asset with the new build - 13 times for v1.24012.9 - invalidating the hash recorded in every flake.lock pinned in between.
+
+`package.nix` now records the release the Arch way - `version` (upstream's, unchanged) plus a `pkgrel` counter - and fetches from that release's own tag (`v1.24012.9-14/...`), whose assets are written once and never touched again. The pipeline step that overwrote the base-tag tarballs is deleted. CI stamps `version`, `pkgrel` and `hash` together on each release, so a locked flake input now stays valid forever; updating remains the usual `nix flake update` away.
+
+If you are currently stuck on the mismatch: `nix flake update claude-desktop-extra` (or `nix flake lock --update-input claude-desktop-extra` on older Nix) onto latest master resolves it.
+
+### Version check: a transient GitHub error no longer misfires the gh-pages bootstrap
+
+The badge-update step decided whether the gh-pages branch exists by piping `git ls-remote` into `grep`. When GitHub answered with a transient HTTP 503 (run 30801072411), the empty pipe read as "branch missing", the step bootstrapped a fresh root-commit repo containing only the badge files, and its push was rejected non-fast-forward - failing the run. The probe now retries three times and refuses to bootstrap when `ls-remote` itself fails, so only a genuinely absent branch triggers first-run setup.
+
 ### Computer Use executor: remaining probe/timing exec calls converted to argument arrays
 
 The residual shell-string `execSync` calls in `js/cu_linux_executor.js` now run through `execFileSync` with argument arrays: the `systemd-detect-virt` VM probe, the `which`-based command cache, the `pgrep -x ydotoold` daemon check, and the ydotool hold-key `sleep`. None of these carried attacker-controlled input (the model-supplied paths were already converted 2026-07-13), so this is defensive consistency, not a vulnerability fix. The now-unused `_exec`/`_execBuf` shell helpers are gone.

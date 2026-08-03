@@ -1869,6 +1869,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ── AUR preflight ───────────────────────────────────────────────
+      # The AUR push at the end of this job is the only step that depends
+      # on an external service that can be down (e.g. "The AUR is down due
+      # to maintenance", run 30741060085). Probe it BEFORE anything is
+      # published: failing here stops the release while every channel
+      # (GitHub Release + pacman repo assets, Pages apt/dnf repos, AUR,
+      # README versions) is still consistently on the previous version.
+      # A failure mid-job instead leaves them half-deployed, because the
+      # failed job skips deploy-rpm-repo -> deploy-pages.
+      - name: Setup SSH for AUR
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts || true
+
+          printf '%s\n' \
+            "Host aur.archlinux.org" \
+            "  User aur" \
+            "  IdentityFile ~/.ssh/aur" \
+            "  StrictHostKeyChecking no" \
+            >> ~/.ssh/config
+
+      - name: Preflight - AUR reachable
+        run: |
+          for i in 1 2 3; do
+            if git ls-remote ssh://aur@aur.archlinux.org/claude-desktop-extra.git HEAD; then
+              exit 0
+            fi
+            echo "AUR unreachable (attempt $i/3), retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::AUR is unreachable - aborting BEFORE publishing anything, all channels stay on the previous version. Re-run this workflow once the AUR is back up."
+          exit 1
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -1908,8 +1943,13 @@ jobs:
           # Published as release assets: the AUR push that used to be their only
           # destination is gone, and users doing the `makepkg -si` fallback need
           # PKGBUILD and claude-desktop-extra.install side by side.
+          # .SRCINFO is staged under the asset name GitHub would assign it
+          # anyway (dotfile assets are stored as default.SRCINFO). Uploading
+          # it under its final name keeps release re-runs idempotent: with the
+          # names mismatched, action-gh-release's overwrite pass corrupted the
+          # asset and failed the step (run 30801306507 attempt 2).
           cp artifacts/pkgbuild/PKGBUILD release-files/
-          cp artifacts/pkgbuild/.SRCINFO release-files/
+          cp artifacts/pkgbuild/.SRCINFO release-files/default.SRCINFO
           cp artifacts/pkgbuild/claude-desktop-extra.install release-files/
 
           # Arch packages: NOT copied into release-files/ here - the pacman
@@ -2094,10 +2134,10 @@ jobs:
         with:
           tag_name: ${{ needs.check-version.outputs.tag }}
           name: ${{ needs.check-version.outputs.release_name }}
-          # .SRCINFO is listed explicitly: the glob does not match dotfiles.
+          # .SRCINFO is staged as default.SRCINFO (its GitHub asset name), so
+          # the plain glob covers it and re-runs overwrite it cleanly.
           files: |
             release-files/*
-            release-files/.SRCINFO
           body: |
             ## ${{ needs.check-version.outputs.release_name }}
 
@@ -2200,7 +2240,7 @@ jobs:
       # /releases/latest/download/claude-desktop-bin.db plus the package
       # files, and already-shipped AppImages zsync-update from
       # |claude-desktop-bin|latest|. Mirror the EXACT same asset set as the
-      # release above (release-files/* plus the dot-file .SRCINFO).
+      # release above (release-files/*; .SRCINFO is staged as default.SRCINFO).
       # continue-on-error: a mirror hiccup must never block the main repo's
       # APT deploy / README commit steps that follow in this job.
       - name: Mirror release to legacy claude-desktop-bin repo
@@ -2225,8 +2265,8 @@ jobs:
               --notes "Legacy mirror of https://github.com/${REPO}/releases/tag/${TAG}. The project was renamed to claude-desktop-extra - see https://github.com/${REPO} for the release notes and migration guide. This mirror keeps pre-rename pacman/AppImage installs updating during the transition window."
           fi
           gh release upload "$TAG" -R "$LEGACY_REPO" --clobber \
-            release-files/* release-files/.SRCINFO
-          echo "Mirrored $(ls release-files | wc -l) assets (+ .SRCINFO) to ${LEGACY_REPO}@${TAG}"
+            release-files/*
+          echo "Mirrored $(ls release-files | wc -l) assets to ${LEGACY_REPO}@${TAG}"
 
       - name: Deploy APT Repository and static files
         env:
@@ -2398,35 +2438,19 @@ jobs:
 
           echo "Verified: SHA256 matches (${ACTUAL_SHA})"
 
-      - name: Refresh base-tag tarballs on patch releases
-        if: needs.check-version.outputs.pkgrel != '1'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.check-version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          # package.nix fetches the tarball from the BASE tag (v${VERSION}, no
-          # pkgrel suffix). On a pkgrel bump the new assets land only on the
-          # v${VERSION}-N tag, so without this step Nix users would silently
-          # keep getting the previous build. Clobber the base-tag tarballs with
-          # the freshly built ones; the nix-hash step below then computes the
-          # matching new hash for package.nix.
-          gh release upload "v${VERSION}" \
-            "release-files/claude-desktop-${VERSION}-linux.tar.gz" \
-            "release-files/claude-desktop-${VERSION}-linux-aarch64.tar.gz" \
-            --repo "$REPO" --clobber
-          echo "Refreshed base-tag (v${VERSION}) tarballs for Nix"
-
       - name: Compute Nix hash from released tarball
         id: nix-hash
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
+          TAG: ${{ needs.check-version.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
-          # package.nix always uses v${version} (base version, no pkgrel suffix).
-          # Compute the hash from that exact URL so it matches what users fetch
-          # (on pkgrel bumps the step above refreshed those base-tag assets).
-          NIX_URL="https://github.com/${REPO}/releases/download/v${VERSION}/claude-desktop-${VERSION}-linux.tar.gz"
+          # package.nix fetches from this release's own tag (v${VERSION} for
+          # pkgrel 1, v${VERSION}-N for re-releases). Published assets are
+          # immutable - never re-uploaded or clobbered - so a pinned flake.lock
+          # keeps working after later pkgrel releases (issue #214). Compute the
+          # hash from the exact URL users will fetch.
+          NIX_URL="https://github.com/${REPO}/releases/download/${TAG}/claude-desktop-${VERSION}-linux.tar.gz"
 
           echo "Fetching tarball from Nix fetchurl URL: ${NIX_URL}"
           for i in 1 2 3 4 5; do
@@ -2450,14 +2474,7 @@ jobs:
           echo "released_nix_hash=${RELEASED_NIX_HASH}" >> $GITHUB_OUTPUT
 
           rm -f /tmp/nix-tarball.tar.gz
-          echo "Nix SRI hash (from v${VERSION} release): ${RELEASED_NIX_HASH}"
-
-      # NOTE: there is deliberately no AUR push. The AUR package was deleted by
-      # the AUR admins after a "duplicate" request; the AUR git repo survives
-      # deletion, so pushing again would re-create the package we were removed
-      # from. Arch users are served by our own signed pacman repository on the
-      # release assets (built above), with the published PKGBUILD as a
-      # `makepkg -si` fallback.
+          echo "Nix SRI hash (from ${TAG} release): ${RELEASED_NIX_HASH}"
 
       - name: Update README with new version
         env:
@@ -2485,9 +2502,11 @@ jobs:
       - name: Update Nix package hash + .upstream-version
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
+          PKGREL: ${{ needs.check-version.outputs.pkgrel }}
           NIX_HASH: ${{ steps.nix-hash.outputs.released_nix_hash }}
         run: |
           sed -i -E "s|version = \"[^\"]+\"|version = \"$VERSION\"|" packaging/nix/package.nix
+          sed -i -E "s|pkgrel = \"[0-9]+\"|pkgrel = \"$PKGREL\"|" packaging/nix/package.nix
           sed -i -E "s|hash = \"sha256-[^\"]+\"|hash = \"$NIX_HASH\"|" packaging/nix/package.nix
 
           # Record the released version as the one our patches/docs are validated
@@ -2509,22 +2528,10 @@ jobs:
       # Pushes the release's PKGBUILD to the claude-desktop-extra AUR
       # package (fresh AUR repo created by the first push - the old
       # claude-desktop-bin AUR package was deleted and must never be
-      # re-created). Runs last in the job: everything critical (release,
-      # repos, README/nix commit) is already published by now.
-      - name: Setup SSH for AUR
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
-
-          printf '%s\n' \
-            "Host aur.archlinux.org" \
-            "  User aur" \
-            "  IdentityFile ~/.ssh/aur" \
-            "  StrictHostKeyChecking no" \
-            >> ~/.ssh/config
-
+      # re-created). Runs last in the job; the AUR-reachable preflight at
+      # the top of the job already failed fast if the AUR is down, and the
+      # retries below ride out short blips in the window since then. SSH
+      # config was written by "Setup SSH for AUR" at the top of the job.
       - name: Push to AUR
         env:
           AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
@@ -2537,7 +2544,16 @@ jobs:
           git config --global user.name "$AUR_USERNAME"
           git config --global user.email "$AUR_EMAIL"
 
-          git clone ssh://aur@aur.archlinux.org/claude-desktop-extra.git aur-repo
+          for i in 1 2 3; do
+            git clone ssh://aur@aur.archlinux.org/claude-desktop-extra.git aur-repo && break
+            rm -rf aur-repo
+            if [ "$i" = 3 ]; then
+              echo "::error::AUR clone failed after 3 attempts"
+              exit 1
+            fi
+            echo "AUR clone failed (attempt $i/3), retrying in 30s..."
+            sleep 30
+          done
 
           # PKGBUILD's install= points at claude-desktop-extra.install; ship
           # it so users' makepkg finds it. Download the three files from the
@@ -2557,8 +2573,18 @@ jobs:
           git add PKGBUILD .SRCINFO claude-desktop-extra.install
           git diff --staged --quiet || {
             git commit -m "Update to ${VERSION}-${PKGREL}"
-            git push origin master
-            echo "Successfully pushed claude-desktop-extra to AUR"
+            for i in 1 2 3; do
+              if git push origin master; then
+                echo "Successfully pushed claude-desktop-extra to AUR"
+                break
+              fi
+              if [ "$i" = 3 ]; then
+                echo "::error::AUR push failed after 3 attempts"
+                exit 1
+              fi
+              echo "AUR push failed (attempt $i/3), retrying in 30s..."
+              sleep 30
+            done
           }
 
       - name: Cleanup
